@@ -1,0 +1,16 @@
+From:
+To: mia.fischer@acme.example
+CC: lukas.berger@acme.example
+Subject: Re: Orion pilot go/no-go checklist
+Date: 2026-03-06T09:40:00+00:00
+ConversationId: AAQkAGI2NDcExample06
+
+Mia,
+
+Thanks, this is a clear picture. I'll take the two cold targets and send personal notes today; you'll have the confirmed shortlist by Friday.
+
+On terms: David expects sign-off this week, so I'm holding the pilot date for now. If legal slips, we re-plan Monday.
+
+One ask: please add the Nimbus load-test result to the go/no-go once Arun has it. That's the criterion I'm least sure of.
+
+Sam

@@ -1,0 +1,21 @@
+Type Category: Uncategorized
+Type From:  mia.fischer@acme.example
+Type To:  s.rivera@acme.example;lukas.berger@acme.example
+Type CC:
+Type Subject:  Orion pilot go/no-go checklist
+Type Date:  2026-03-06T08:15:00+00:00
+Type ConversationId:  AAQkAGI2NDcExample06
+
+Sam,
+
+Pulling together the go/no-go for the Orion DE pilot. Here's where we are against the criteria we agreed:
+
+- Northwind terms: agreed at 12% rev-share, in legal. Expect signature this week.
+- Pilot customers: 2 committed (Acme DE inside accounts), 3 in the shortlist. I need you to nudge the 2 cold ones - they'll move faster with a note from the PM.
+- Build: sandbox at ~120 transactions/week, onboarding flow reviewed.
+- Open risk: Nimbus sync capacity at launch volume. Arun has a load test scheduled for the 13th.
+
+Can you confirm the shortlist by Friday so we can lock the cohort? Also flagging: if terms slip past next week, the pilot date is at risk.
+
+Thanks,
+Mia

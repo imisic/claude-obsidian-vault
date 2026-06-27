@@ -1,0 +1,42 @@
+formulas:
+  age: 'if(date, (today() - date(date)).days.round(0).toString() + "d ago", "")'
+
+properties:
+  date:
+    displayName: "Date"
+  interaction-type:
+    displayName: "Type"
+  meeting-type:
+    displayName: "Meeting"
+  summary:
+    displayName: "Summary"
+  formula.age:
+    displayName: "When"
+
+views:
+  - type: table
+    name: "Latest activity"
+    filters:
+      and:
+        - file.inFolder("05-Interactions")
+        - 'file.ext == "md"'
+    order:
+      - date
+      - file.name
+      - interaction-type
+      - summary
+      - formula.age
+
+  - type: table
+    name: "This week (live data)"
+    filters:
+      and:
+        - file.inFolder("05-Interactions")
+        - 'file.ext == "md"'
+        - '(today() - date(date)).days <= 7'
+    order:
+      - date
+      - file.name
+      - interaction-type
+      - summary
+      - formula.age

@@ -1,0 +1,32 @@
+/* Custom task statuses, visual styling */
+
+/* [>] Delegated, muted, waiting on someone else */
+li[data-task=">"] > input[type="checkbox"],
+li[data-task=">"] > p > input[type="checkbox"] {
+  border-color: var(--text-muted);
+}
+li[data-task=">"] > .task-list-item-checkbox ~ * {
+  color: var(--text-muted);
+}
+
+/* [!] Urgent, error color, bold */
+li[data-task="!"] > input[type="checkbox"],
+li[data-task="!"] > p > input[type="checkbox"] {
+  border-color: var(--text-error);
+}
+li[data-task="!"] {
+  color: var(--text-error);
+  font-weight: 600;
+}
+
+/* [/] In Progress, accent color */
+li[data-task="/"] > input[type="checkbox"],
+li[data-task="/"] > p > input[type="checkbox"] {
+  border-color: var(--text-accent);
+}
+
+/* [-] Cancelled, strikethrough, muted */
+li[data-task="-"] > .task-list-item-checkbox ~ * {
+  text-decoration: line-through;
+  color: var(--text-faint);
+}

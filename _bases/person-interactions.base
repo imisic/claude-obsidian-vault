@@ -1,0 +1,33 @@
+filters:
+  and:
+    - file.inFolder("05-Interactions")
+    - 'file.ext == "md"'
+    - or:
+        - 'person == this'
+        - 'list(attendees).contains(this)'
+        - 'from == this'
+        - 'list(to).contains(this)'
+        - 'list(cc).contains(this)'
+
+formulas:
+  age: 'if(date, (today() - date(date)).days.round(0).toString() + "d ago", "")'
+
+properties:
+  date:
+    displayName: "Date"
+  interaction-type:
+    displayName: "Type"
+  meeting-type:
+    displayName: "Meeting"
+  formula.age:
+    displayName: "When"
+
+views:
+  - type: table
+    name: "Interactions"
+    order:
+      - date
+      - file.name
+      - interaction-type
+      - meeting-type
+      - formula.age

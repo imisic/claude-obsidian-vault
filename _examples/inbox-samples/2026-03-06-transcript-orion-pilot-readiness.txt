@@ -1,0 +1,14 @@
+MeetingSubject: Orion pilot readiness
+MeetingDate: 2026-03-06T14:00:00+00:00
+Attendees: Sam Rivera; Raj Patel; Sofia Costa
+MeetingType: sync
+RecordingDuration: 0:22:00
+
+[0:00:05] Sam: Quick readiness check before we commit to the pilot date. Where's the build?
+[0:00:18] Raj: Sandbox is stable. We're at about 120 transactions a week, no errors in the last run.
+[0:00:41] Sofia: Onboarding flow is done for self-serve. I'm tightening the API-key error states from the design review.
+[0:01:10] Sam: Good. The thing I'm watching is Nimbus sync at real volume.
+[0:01:22] Raj: Arun's load test is on the 13th. If it passes we're clear; if not we throttle the first cohort.
+[0:01:48] Sam: Works. Let's make the load test a go/no-go criterion.
+[0:02:05] Sofia: I'll have the error-state fix in by the 9th.
+[0:02:20] Sam: Great. I'll lock the customer shortlist by Friday and we reconvene after the load test.

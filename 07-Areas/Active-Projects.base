@@ -1,0 +1,28 @@
+properties:
+  status:
+    displayName: "Status"
+  products:
+    displayName: "Products"
+  markets:
+    displayName: "Markets"
+  owner:
+    displayName: "Owner"
+  quarter:
+    displayName: "Quarter"
+
+views:
+  - type: table
+    name: "Active projects"
+    filters:
+      and:
+        - or:
+            - 'type == "project"'
+            - 'type == "workstream"'
+        - 'status == "active"'
+    order:
+      - file.name
+      - status
+      - products
+      - markets
+      - owner
+      - quarter

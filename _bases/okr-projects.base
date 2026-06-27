@@ -1,0 +1,25 @@
+filters:
+  and:
+    - or:
+        - 'type == "project"'
+        - 'type == "workstream"'
+    - 'okr-link == this'
+
+properties:
+  status:
+    displayName: "Status"
+  products:
+    displayName: "Products"
+  markets:
+    displayName: "Markets"
+  quarter:
+    displayName: "Quarter"
+
+views:
+  - type: table
+    name: "Linked Projects"
+    order:
+      - file.name
+      - status
+      - products
+      - markets

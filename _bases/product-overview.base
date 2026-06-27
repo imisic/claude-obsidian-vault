@@ -1,0 +1,41 @@
+properties:
+  role:
+    displayName: "Role"
+  company:
+    displayName: "Company"
+  market:
+    displayName: "Market"
+  status:
+    displayName: "Status"
+  markets:
+    displayName: "Markets"
+  quarter:
+    displayName: "Quarter"
+  segment:
+    displayName: "Segment"
+
+views:
+  - type: table
+    name: "People"
+    filters:
+      and:
+        - 'type == "person"'
+        - 'list(products).contains(this.file.basename)'
+    order:
+      - file.name
+      - role
+      - market
+
+  - type: table
+    name: "Projects"
+    filters:
+      and:
+        - or:
+            - 'type == "project"'
+            - 'type == "workstream"'
+        - 'list(products).contains(this.file.basename)'
+    order:
+      - file.name
+      - status
+      - markets
+      - quarter

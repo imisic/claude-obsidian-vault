@@ -1,0 +1,21 @@
+{
+  "promptDelete": false,
+  "alwaysUpdateLinks": true,
+  "attachmentFolderPath": "_attachments",
+  "userIgnoreFilters": [
+    "_attachments/",
+    "_bases/",
+    "_db/",
+    "_examples/",
+    "_scripts/",
+    "_templates/",
+    "assets/",
+    "docs/"
+  ],
+  "pdfExportSettings": {
+    "pageSize": "A4",
+    "landscape": false,
+    "margin": "0",
+    "downscalePercent": 100
+  }
+}

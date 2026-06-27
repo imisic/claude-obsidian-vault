@@ -1,0 +1,27 @@
+formulas:
+  age: 'if(date, (today() - date(date)).days.round(0).toString() + "d ago", "")'
+
+properties:
+  date:
+    displayName: "Date"
+  interaction-type:
+    displayName: "Type"
+  summary:
+    displayName: "Summary"
+  formula.age:
+    displayName: "When"
+
+views:
+  - type: table
+    name: "Awaiting review"
+    filters:
+      and:
+        - file.inFolder("05-Interactions")
+        - 'file.ext == "md"'
+        - 'status == "unprocessed"'
+    order:
+      - date
+      - file.name
+      - interaction-type
+      - summary
+      - formula.age

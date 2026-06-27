@@ -1,0 +1,161 @@
+{
+  "people": [
+    {
+      "name": "Sam Rivera",
+      "link": "[[Sam-Rivera]]",
+      "aliases": ["Rivera, Sam", "S. Rivera"],
+      "company": "Acme Corp",
+      "emails": ["sam.rivera@example.com", "s.rivera@acme.example", "sam.rivera@acme.onmicrosoft.com"]
+    },
+    {
+      "name": "Jordan Lee",
+      "link": "[[Jordan-Lee]]",
+      "aliases": ["Lee, Jordan"],
+      "company": "Acme Corp",
+      "emails": ["jordan.lee@acme.example"],
+      "vip": "boss-chain"
+    },
+    {
+      "name": "Morgan Hayes",
+      "link": "[[Morgan-Hayes]]",
+      "aliases": ["Hayes, Morgan"],
+      "company": "Acme Corp",
+      "emails": ["morgan.hayes@acme.example"],
+      "vip": "boss-chain"
+    },
+    {
+      "name": "Patricia Vance",
+      "link": "[[Patricia-Vance]]",
+      "aliases": ["Vance, Patricia"],
+      "company": "Acme Corp",
+      "emails": ["patricia.vance@acme.example"],
+      "vip": "boss-chain"
+    },
+    {
+      "name": "Elena Rossi",
+      "link": "[[Elena-Rossi]]",
+      "aliases": ["Rossi, Elena"],
+      "company": "Acme Corp",
+      "emails": ["elena.rossi@acme.example"],
+      "vip": "stakeholder"
+    },
+    {
+      "name": "David Klein",
+      "link": "[[David-Klein]]",
+      "aliases": ["Klein, David"],
+      "company": "Acme Corp",
+      "emails": ["david.klein@acme.example"],
+      "vip": "stakeholder"
+    },
+    {
+      "name": "Noah Bauer",
+      "link": "[[Noah-Bauer]]",
+      "aliases": ["Bauer, Noah"],
+      "company": "Acme Corp",
+      "emails": ["noah.bauer@acme.example"],
+      "vip": "stakeholder"
+    },
+    {
+      "name": "George Pappas",
+      "link": "[[George-Pappas]]",
+      "aliases": ["Pappas, George"],
+      "company": "Acme Corp",
+      "emails": ["george.pappas@acme.example"],
+      "vip": "stakeholder"
+    },
+    {
+      "name": "Mia Fischer",
+      "link": "[[Mia-Fischer]]",
+      "aliases": ["Fischer, Mia"],
+      "company": "Acme Corp",
+      "emails": ["mia.fischer@acme.example"],
+      "vip": "team"
+    },
+    {
+      "name": "Raj Patel",
+      "link": "[[Raj-Patel]]",
+      "aliases": ["Patel, Raj"],
+      "company": "Acme Corp",
+      "emails": ["raj.patel@acme.example"],
+      "vip": "team"
+    },
+    {
+      "name": "Sofia Costa",
+      "link": "[[Sofia-Costa]]",
+      "aliases": ["Costa, Sofia"],
+      "company": "Acme Corp",
+      "emails": ["sofia.costa@acme.example"],
+      "vip": "team"
+    },
+    {
+      "name": "Lukas Berger",
+      "link": "[[Lukas-Berger]]",
+      "aliases": ["Berger, Lukas"],
+      "company": "Acme Corp",
+      "emails": ["lukas.berger@acme.example"],
+      "vip": "team"
+    },
+    {
+      "name": "Piotr Nowak",
+      "link": "[[Piotr-Nowak]]",
+      "aliases": ["Nowak, Piotr"],
+      "company": "Acme Corp",
+      "emails": ["piotr.nowak@acme.example"],
+      "vip": "team"
+    },
+    {
+      "name": "Arun Shah",
+      "link": "[[Arun-Shah]]",
+      "aliases": ["Shah, Arun"],
+      "company": "Acme Corp",
+      "emails": ["arun.shah@acme.example"],
+      "vip": "team"
+    },
+    {
+      "name": "Tom Becker",
+      "link": "[[Tom-Becker]]",
+      "aliases": ["Becker, Tom"],
+      "company": "Acme Corp",
+      "emails": ["tom.becker@acme.example"],
+      "stub": false
+    },
+    {
+      "name": "Lena Wolf",
+      "link": "[[Lena-Wolf]]",
+      "aliases": ["Wolf, Lena"],
+      "company": "Acme Corp",
+      "emails": ["lena.wolf@acme.example"],
+      "stub": false
+    },
+    {
+      "name": "Hannah Vogel",
+      "link": "[[Hannah-Vogel]]",
+      "aliases": ["Vogel, Hannah"],
+      "company": "Northwind Logistics",
+      "emails": ["hannah.vogel@northwind.example"],
+      "stub": true
+    }
+  ],
+  "products": [
+    { "name": "Orion", "link": "[[Orion]]", "aliases": ["Orion Platform", "Orion B2B"] },
+    { "name": "Nimbus", "link": "[[Nimbus]]", "aliases": ["Nimbus Data Platform"] }
+  ],
+  "projects": [
+    { "name": "Project-Alpha", "link": "[[Project-Alpha]]", "aliases": ["Alpha", "Orion launch", "Orion DE launch"] },
+    { "name": "Project-Beta", "link": "[[Project-Beta]]", "aliases": ["Beta", "Nimbus platform"] },
+    { "name": "Project-Gamma", "link": "[[Project-Gamma]]", "aliases": ["Gamma"] },
+    { "name": "Partner-Onboarding", "link": "[[Partner-Onboarding]]", "aliases": ["Partner onboarding workstream"] }
+  ],
+  "markets": [
+    { "name": "DE", "link": "[[DE]]", "aliases": ["Germany", "Deutschland"] },
+    { "name": "FR", "link": "[[FR]]", "aliases": ["France"] }
+  ],
+  "segments": [
+    { "name": "B2B", "link": "[[B2B]]", "aliases": ["Business"] },
+    { "name": "EU", "link": "[[EU]]", "aliases": ["Europe"] },
+    { "name": "SMB", "link": "[[SMB]]", "aliases": ["Small & medium business"] }
+  ],
+  "teams": [
+    { "name": "New-Ventures", "link": "[[New-Ventures]]", "aliases": ["New Ventures", "NV"] }
+  ]
+}

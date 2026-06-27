@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "grep -l '<!--' \"$CLAUDE_FILE_PATH\" && echo \"WARNING: HTML comment found in $CLAUDE_FILE_PATH\" || true"
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "obsidian@obsidian-skills": true
+  }
+}

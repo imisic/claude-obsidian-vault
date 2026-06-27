@@ -1,0 +1,56 @@
+formulas:
+  market_code: "this.file.basename"
+
+properties:
+  role:
+    displayName: "Role"
+  company:
+    displayName: "Company"
+  status:
+    displayName: "Status"
+  platforms:
+    displayName: "Platforms"
+  lead:
+    displayName: "Lead"
+  products:
+    displayName: "Products"
+  quarter:
+    displayName: "Quarter"
+
+views:
+  - type: table
+    name: "People"
+    filters:
+      and:
+        - 'type == "person"'
+        - 'market == this.file.basename'
+    order:
+      - file.name
+      - role
+      - company
+
+  - type: table
+    name: "Projects"
+    filters:
+      and:
+        - or:
+            - 'type == "project"'
+            - 'type == "workstream"'
+        - 'list(markets).contains(this.file.basename)'
+    order:
+      - file.name
+      - status
+      - products
+      - quarter
+
+  - type: table
+    name: "Products"
+    filters:
+      and:
+        - 'type == "product"'
+        - 'list(markets).contains(this.file.basename)'
+    order:
+      - file.name
+      - platforms
+      - status
+      - lead

@@ -1,0 +1,25 @@
+properties:
+  role:
+    displayName: "Role"
+  team:
+    displayName: "Team"
+  company:
+    displayName: "Company"
+  status:
+    displayName: "Status"
+  products:
+    displayName: "Products"
+
+views:
+  - type: table
+    name: "People"
+    filters:
+      and:
+        - 'type == "person"'
+        - file.inFolder("04-People")
+    order:
+      - file.name
+      - role
+      - team
+      - company
+      - status
