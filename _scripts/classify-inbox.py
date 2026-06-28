@@ -1249,6 +1249,140 @@ def generate_transcript_filename(transcript_meta: dict, frontmatter: dict) -> st
 
 
 # ---------------------------------------------------------------------------
+# Run-time estimate (ETA) for the /w-daily heads-up and lite mode
+# ---------------------------------------------------------------------------
+
+# Per-item wall-clock estimates in minutes. Rough, tuned against the timing
+# notes in w-daily/SKILL.md (inline email ~30s, email agent batch ~6min,
+# transcript synthesis ~6min, long ~12min, low-stakes ~5min). Centralized here
+# so they can be adjusted against observed reality without touching logic.
+ETA_EMAIL_INLINE = 0.5          # whole inline email batch (<=6 high/med, simple threads)
+ETA_EMAIL_AGENT_BATCH = 6.0     # one email-processor agent batch
+ETA_DOC = 0.3                   # per document
+ETA_TRANSCRIPT_SUBSTANTIVE = 6.0
+ETA_TRANSCRIPT_LONG = 12.0      # substantive + recording longer than ETA_LONG_RECORDING_SEC
+ETA_TRANSCRIPT_LOW = 5.0        # low-stakes (lecture/training/webinar/demo)
+ETA_LONG_RECORDING_SEC = 30 * 60
+ETA_CONTENTION_FACTOR = 0.5     # >2 transcripts run in parallel but share one
+                                # Sonnet throughput pool, so wall-clock grows
+                                # with the rest, not just the slowest
+ETA_SLOW_THRESHOLD_MIN = 2.0    # below this, /w-daily prints no heads-up line
+
+LOW_STAKES_SUBJECT_PREFIXES = (
+    "lecture", "training", "webinar", "tutorial", "onboarding", "demo",
+)
+
+
+def _duration_to_seconds(duration: str) -> int:
+    """Parse 'H:MM:SS' or 'MM:SS' into seconds. Returns 0 on failure."""
+    if not duration:
+        return 0
+    try:
+        nums = [int(p) for p in duration.split(":")]
+    except ValueError:
+        return 0
+    if len(nums) == 3:
+        h, m, s = nums
+    elif len(nums) == 2:
+        h, m, s = 0, nums[0], nums[1]
+    else:
+        return 0
+    return h * 3600 + m * 60 + s
+
+
+def classify_transcript_stakes(transcript_meta: dict) -> str:
+    """Classify a transcript as 'low-stakes' or 'substantive'.
+
+    Low-stakes = a passive knowledge-transfer recording the owner can safely
+    defer: the subject begins with a learning marker AND it is not a 1on1 or
+    steerco. Mirrors the Model-triage signal documented in w-daily/SKILL.md.
+    'Passive attendee' can't be known before synthesis, so meeting-type
+    (1on1/steerco are never low-stakes) stands in as a deterministic proxy.
+    """
+    meeting_type = (transcript_meta.get("meeting_type") or "general").lower()
+    if meeting_type in ("1on1", "steerco"):
+        return "substantive"
+    subject = (transcript_meta.get("subject") or "").strip().lower()
+    for marker in LOW_STAKES_SUBJECT_PREFIXES:
+        if subject.startswith(marker):
+            return "low-stakes"
+    return "substantive"
+
+
+def estimate_transcript_minutes(transcript_meta: dict, stakes: str) -> float:
+    if stakes == "low-stakes":
+        return ETA_TRANSCRIPT_LOW
+    if _duration_to_seconds(transcript_meta.get("recording_duration", "")) > ETA_LONG_RECORDING_SEC:
+        return ETA_TRANSCRIPT_LONG
+    return ETA_TRANSCRIPT_SUBSTANTIVE
+
+
+def estimate_eta(result: dict, counts: dict) -> dict:
+    """Rough wall-clock estimate for a full run and a lite run.
+
+    full = emails + docs + transcripts(synthesized).
+    lite = emails + docs only (all transcripts deferred to thin stubs, ~free).
+    Transcripts dominate: <=2 run in one sequential agent (sum); >2 run in
+    parallel but contend on one Sonnet pool (slowest + a fraction of the rest).
+    Also stamps each transcript with its 'stakes' class and 'est_minutes'.
+    """
+    breakdown = []
+
+    # Emails: inline when <=6 high/med and no thread wider than 3, else agents.
+    n_high_med = len(result.get("email_manifest", []))
+    email_min = 0.0
+    if n_high_med:
+        max_thread = max((len(t.get("emails", [])) for t in result.get("threads", [])), default=0)
+        if n_high_med <= 6 and max_thread <= 3:
+            email_min = ETA_EMAIL_INLINE
+        else:
+            n_batches = max(1, len(result.get("batches", [])))
+            email_min = ETA_EMAIL_AGENT_BATCH * n_batches
+        breakdown.append({"kind": "emails", "count": n_high_med, "est_minutes": round(email_min, 1)})
+
+    # Docs.
+    n_docs = counts.get("docs", 0)
+    doc_min = ETA_DOC * n_docs
+    if n_docs:
+        breakdown.append({"kind": "docs", "count": n_docs, "est_minutes": round(doc_min, 1)})
+
+    # Transcripts.
+    t_estimates = []
+    for t in result.get("transcripts", []):
+        stakes = classify_transcript_stakes(t)
+        t["stakes"] = stakes
+        est = estimate_transcript_minutes(t, stakes)
+        t["est_minutes"] = est
+        t_estimates.append(est)
+        name = t.get("output_filename") or t.get("subject") or t.get("file") or ""
+        breakdown.append({
+            "kind": "transcript",
+            "name": Path(name).stem if name else "",
+            "class": stakes,
+            "est_minutes": est,
+        })
+
+    n_t = len(t_estimates)
+    if n_t == 0:
+        transcript_min = 0.0
+    elif n_t <= 2:
+        transcript_min = sum(t_estimates)  # one agent, sequential
+    else:
+        ordered = sorted(t_estimates, reverse=True)
+        transcript_min = ordered[0] + ETA_CONTENTION_FACTOR * sum(ordered[1:])
+
+    full_min = email_min + doc_min + transcript_min
+    lite_min = email_min + doc_min  # transcripts deferred, negligible script cost
+
+    return {
+        "full_minutes": int(round(full_min)),
+        "lite_minutes": int(round(lite_min)),
+        "slow": full_min > ETA_SLOW_THRESHOLD_MIN,
+        "breakdown": breakdown,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -1914,6 +2048,12 @@ def main():
     result["backlog_reason"] = backlog_reason
     result["date_span_days"] = date_span_days
 
+    # Run-time estimate for the /w-daily heads-up and lite mode. Also stamps
+    # each transcript with its stakes class + per-item estimate, which the
+    # compact transcript list below surfaces for the lite-mode choice prompt.
+    eta = estimate_eta(result, counts)
+    result["eta"] = eta
+
     # Always write full manifest to file, compact summary to stdout
     manifest_path = args.manifest_file or os.path.join(vault, "_db", "manifest.json")
     atomic_json_write(Path(manifest_path), result)
@@ -1927,6 +2067,7 @@ def main():
         "is_backlog": is_backlog,
         "backlog_reason": backlog_reason,
         "date_span_days": date_span_days,
+        "eta": eta,
         "batches": [
             {"batch_index": i, "file_count": len(b["files"]), "thread_count": len(b["thread_groups"])}
             for i, b in enumerate(result["batches"])
@@ -1945,13 +2086,16 @@ def main():
             }
             for e in result["email_manifest"]
         ],
-        # Compact transcript list: file, subject, date, meeting_type, output_filename
+        # Compact transcript list: file, subject, date, meeting_type, stakes,
+        # est_minutes, output_filename (stakes/est_minutes drive lite-mode choice)
         "transcripts": [
             {
                 "file": t["file"],
                 "subject": t.get("subject", ""),
                 "date": t.get("date", ""),
                 "meeting_type": t.get("meeting_type", "general"),
+                "stakes": t.get("stakes", "substantive"),
+                "est_minutes": t.get("est_minutes", ETA_TRANSCRIPT_SUBSTANTIVE),
                 "output_filename": t.get("output_filename", ""),
             }
             for t in result["transcripts"]

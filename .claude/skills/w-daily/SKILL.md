@@ -2,12 +2,17 @@
 name: w-daily
 description: Create or open a daily note with ingestion and AI briefing. Master morning command that processes inbox and builds daily notes.
 user-invocable: true
-argument-hint: "[YYYY-MM-DD]"
+argument-hint: "[YYYY-MM-DD] [lite] [--upgrade-deferred]"
 ---
 
 # Daily Note with Ingestion
 
-**Date handling:** If `$ARGUMENTS` is provided (e.g. `2026-03-06`), use that as the target date. Otherwise use today's date. The target date determines which daily note file is created/opened and is referred to as TARGET_DATE below.
+**Arguments:** `$ARGUMENTS` may contain, in any order:
+- a `YYYY-MM-DD` date → TARGET_DATE (the daily note created/opened; defaults to today). Referred to as TARGET_DATE below.
+- the keyword `lite` → **lite mode**: process emails and docs fully, but defer transcripts to thin stub notes you choose per run. See Phase 1.7 (the choice) and Step 2.0 (execution).
+- the flag `--upgrade-deferred` → **upgrade mode**: synthesize previously-deferred transcripts in place. This mode ignores the inbox. If present, run **Phase U** (end of this file) and stop; skip all other phases.
+
+The default (`/w-daily` with no args, or just a date) is unchanged: a full run. `lite` is purely additive and only changes how transcripts are handled; emails, docs, daily notes, and briefings are identical to a full run.
 
 This is the master morning command. It ingests the inbox and builds the daily note.
 Email pulling from OneDrive is handled by a Windows scheduled task (`_scripts/Pull-Emails.ps1`) that runs every 15 minutes. Emails are already in `00-Inbox/` by the time this runs.
@@ -149,6 +154,29 @@ Contains detailed per-email data needed for agent prompts:
 
 **Empty meeting preps** (`meeting_preps[]` where `has_meeting_content: false`): Only handle here if no matching transcript exists (checked in Phase 4.3). If no transcript AND no content → delete + log as `skipped-empty` immediately.
 
+## Phase 1.7: Upfront heads-up + lite-mode transcript choice
+
+`classify-inbox.py` adds an `eta` block to its compact summary: `{ full_minutes, lite_minutes, slow, breakdown[] }`, plus per-transcript `stakes` (substantive/low-stakes) and `est_minutes` in `transcripts[]`. This is the one point where the full inbox inventory is known **before** any slow Phase 2 agent runs. The estimates are deterministic and tunable (constants in `classify-inbox.py`); treat them as rough.
+
+**Heads-up (both modes):** If `eta.slow` is true (full estimate over the ~2 min threshold), print one short line to the user before continuing, e.g.:
+```
+Inbox: 4 emails, 2 transcripts, 1 doc. Estimated full run ~13 min (lite ~2 min).
+  - 1on1-jordan-lee      substantive  ~6 min
+  - training-aws-basics  low-stakes   ~5 min
+```
+If `eta.slow` is false (a quiet morning under the threshold), print nothing extra and proceed. This keeps the default fast-path experience unchanged.
+
+**Lite mode only:** after the heads-up, present the transcripts and ask which to synthesize now, using the compact `transcripts[]` (subject, meeting_type, stakes, est_minutes):
+```
+Synthesize which transcripts now?  [all / none / substantive-only / pick]
+```
+- `all` → every transcript synthesized now (SYNTH_NOW = all).
+- `none` → every transcript deferred (DEFER = all).
+- `substantive-only` → SYNTH_NOW = transcripts with `stakes: substantive`; DEFER = the rest.
+- `pick` → list transcripts with an index and let the user choose; chosen → SYNTH_NOW, the rest → DEFER.
+
+Record SYNTH_NOW and DEFER (by transcript `file` / `output_filename`). Step 2.0 executes them. Ask this once, here, so the rest of the run is unattended. If lite mode has zero transcripts, there is nothing to ask; proceed as a normal run.
+
 ## Phase 1.5: Inline processing (skip agent overhead where possible)
 
 ### Phase 1.5a: Inline email processing
@@ -231,6 +259,55 @@ When triggered, process email batches **sequentially** (not all in parallel) to 
 ## Phase 2: Process remaining content in parallel
 
 Dispatch agents only for content NOT already handled inline in Phase 1.5.
+
+### Step 2.0: Lite-mode transcript split (lite only)
+
+In **lite mode**, do NOT dispatch every transcript. Use the SYNTH_NOW / DEFER sets recorded in Phase 1.7:
+- **SYNTH_NOW transcripts**: dispatch normally via Step 2.1 below (same agent path, same quality).
+- **DEFER transcripts**: do NOT dispatch an agent. Build a thin stub note for each (shape below). Step 2.2 writes them via `write-notes.py`, which also moves the raw transcript + companions to `_attachments/`.
+- Emails and docs are unaffected by lite mode and proceed exactly as in a full run.
+
+A full run (no `lite`) skips this step: all transcripts go through Step 2.1.
+
+**Deferred-stub output file** (one `notes[]` entry per deferred transcript; build each from its manifest `transcripts[]` entry). Write the whole thing to `_db/transcript-out-deferred.json`, the **same `{notes[], log_entries[]}` shape and naming family as a transcript agent's output file**. Do NOT call `write-notes.py` here: Step 2.2's batched `--inputs` pass writes this file alongside the SYNTH_NOW agent outputs, and Phase 5 reads the same files, so a deferred meeting flows through the identical path and appears (flagged) in the daily note. The file:
+```json
+{
+  "notes": [{
+    "output_path": "05-Interactions/<YYYY>/<output_filename>",
+    "frontmatter": {
+      "date": "<t.date>", "type": "meeting", "interaction-type": "meeting",
+      "meeting-type": "<t.frontmatter.meeting-type>",
+      "attendees": ["<from t.frontmatter.attendees>"],
+      "summary": "<t.subject>",
+      "status": "deferred",
+      "deferred-source": "_attachments/<name>.txt",
+      "recording-duration": "<t.frontmatter.recording-duration, if present>",
+      "source-file": "<name>.txt"
+    },
+    "body_text": "> [!info] Transcript deferred, not yet synthesized. Raw file in `_attachments/<name>.txt`. Run `/w-daily --upgrade-deferred` to synthesize.\n",
+    "source_files": ["00-Inbox/_processing/<name>.txt"],
+    "move_to_attachments": true,
+    "briefing_data": {
+      "date": "<t.date>", "type": "meeting", "subject": "<t.subject>",
+      "summary": "<t.subject>", "output_file": "<output_filename>",
+      "vip_involved": ["<t.frontmatter.vip-involved, if any>"],
+      "deferred": true, "actions": [], "decisions": []
+    }
+  }],
+  "log_entries": [{
+    "source-file": "<name>.txt", "action": "created",
+    "output-file": "05-Interactions/<YYYY>/<output_filename>", "type": "meeting",
+    "date": "<t.date>", "subject": "<t.subject>",
+    "summary": "Deferred transcript (not yet synthesized)"
+  }]
+}
+```
+Rules:
+- `write-notes.py` auto-moves the sibling `.json`/`.md` companions of the `.txt`, so list only the `.txt` in `source_files`.
+- If the companion `.json` lists `annotations.screenshots[]`, add a `screenshot_files` array (the `00-Inbox/_screenshots/...png` paths) so they move to `_attachments/screenshots/<stem>/` for the eventual upgrade. Omit if none.
+- `deferred-source` is the predicted `_attachments/<name>.txt`. If `_attachments/` already holds that name, `write-notes.py` suffixes it (`-2`); the upgrade falls back to the `source-file` basename, so this stays safe.
+- `briefing_data.deferred: true` makes `build-daily-briefings.py` flag the meeting `(deferred, not yet synthesized)` in the daily note.
+- Put all deferred stubs in the one `_db/transcript-out-deferred.json` (a single `notes[]` array + `log_entries[]`). Step 2.2's pre-flight glob (`_db/transcript-out*.json`) and Phase 5's `--inputs` glob both pick it up automatically; Phase 7 cleanup removes it with the other `transcript-out-*.json` files.
 
 **Key invariant: agents write their own output files. Master never re-serializes JSON.**
 Processor agents write their structured output to `_db/email-out.json` / `_db/transcript-out.json` directly and return a tiny pointer (≤200 chars). The master reads the file and feeds it to `write-notes.py`. This eliminates the biggest time cost of the pipeline: typing multi-thousand-line JSON back through the main context.
@@ -643,3 +720,16 @@ rm -f _db/email-out.json _db/transcript-out.json _db/transcript-out-*.json _db/b
 - Confirm TARGET_DATE daily note is ready
 - **Git sync status** (from Phase 6)
 - Plaud completeness warning (if Phase 0.6 emitted one)
+
+## Phase U: Upgrade deferred transcripts (`--upgrade-deferred`)
+
+Runs **only** when `--upgrade-deferred` is in `$ARGUMENTS`. Ignores the inbox entirely. Synthesizes every `status: deferred` transcript stub in place, so each thin note becomes a full meeting note with no duplicate.
+
+1. **Find deferred stubs**: `grep -rl "^status: deferred" 05-Interactions/` (or Glob + frontmatter read). If none, report "No deferred transcripts to upgrade." and stop.
+2. **Resolve each raw transcript**: read the stub's `deferred-source` (an `_attachments/*.txt` path). If it is missing on disk, fall back to globbing `_attachments/` for the stub's `source-file` basename. If still not found, log the stub as `failed` (reason `deferred-source-missing`), leave `status: deferred`, and continue with the rest.
+3. **Synthesize (agent, same as Phase 2)**: for each resolved transcript, dispatch a `transcript-processor` agent on Sonnet (or Haiku per the Model-triage rule). Pass the raw transcript path and the stub's known frontmatter (date, meeting-type, attendees). Instruct the agent to write `_db/transcript-out-upgrade-{i}.json` and to set each note's `output_path` to **the existing stub path** and `overwrite: true`. When >2, dispatch in one tool block (same parallel rule as Step 2.1). The synthesized frontmatter must NOT carry `status: deferred` or `deferred-source` (the note is now fully processed).
+4. **Pre-flight + write** (same as Step 2.2): normalize/validate the agent outputs, then `python _scripts/write-notes.py --vault "." --inputs $(ls _db/transcript-out-upgrade-*.json 2>/dev/null)`. `overwrite: true` makes the synthesized note replace the stub in place (no `-2` duplicate). Leave `move_to_attachments` unset/false here: the raw transcript already lives in `_attachments/` and must stay (originals policy).
+5. **Rebuild affected daily briefings**: collect the distinct `date:` of the upgraded notes and run `python _scripts/rebuild-daily-from-notes.py --vault "." --date <d1> --date <d2> ...` so the now-extracted actions and decisions appear and the `(deferred, not yet synthesized)` marker disappears.
+6. **Reindex actions**: `python _scripts/build-open-actions.py --vault "."` so the new actions enter the `/w-1on1` and `/w-review` task surfaces.
+7. **Commit (optional)**: if the vault is a git repo, commit per Phase 6's allowlist with message `w-daily: upgrade-deferred`.
+8. **Cleanup + report**: remove the temp output files (`rm -f _db/transcript-out-upgrade-*.json`), then report which stubs were upgraded, which failed, and which dates' briefings were rebuilt.

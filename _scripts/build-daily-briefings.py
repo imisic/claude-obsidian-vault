@@ -181,7 +181,11 @@ def render_meetings(meetings: list[dict]) -> list[str]:
         stem = _note_stem(m.get("note_path", ""))
         quality = m.get("recording_quality")
         quality_note = f" _(recording {quality})_" if quality else ""
-        lines.append(f"- {summary} → [[{stem}|note]]{quality_note}")
+        # Lite-mode deferred transcripts: the meeting note is a thin stub, raw
+        # transcript parked in _attachments/. Flag it so the briefing is honest
+        # about what was (not) captured. Run /w-daily --upgrade-deferred later.
+        deferred_note = " _(deferred, not yet synthesized)_" if m.get("deferred") else ""
+        lines.append(f"- {summary} → [[{stem}|note]]{quality_note}{deferred_note}")
     lines.append("")
     return lines
 

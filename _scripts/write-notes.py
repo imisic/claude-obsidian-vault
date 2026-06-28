@@ -16,7 +16,9 @@ Input JSON format:
       "frontmatter": { "date": "...", "type": "email", ... },
       "body_text": "# Subject\n\nBody with [[wikilinks]]...",   # `body` accepted as alias
       "source_files": ["00-Inbox/_processing/original.txt"],
-      "briefing_data": { "date": "...", "subject": "...", "summary": "..." }
+      "briefing_data": { "date": "...", "subject": "...", "summary": "..." },
+      "move_to_attachments": false,   # optional: move source_files to _attachments/ instead of deleting
+      "overwrite": false              # optional: write in place (no -2/-3 rename); used by /w-daily --upgrade-deferred
     }
   ],
   "log_entries": [
@@ -452,8 +454,12 @@ def main():
             # Ensure parent directory exists
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Collision handling
-            output_path = resolve_collision(output_path)
+            # Collision handling. `overwrite` (used by --upgrade-deferred to
+            # replace a deferred-transcript stub in place) bypasses the -2/-3
+            # rename so the synthesized note lands on the same path instead of
+            # creating a duplicate alongside the stub.
+            if not note.get("overwrite"):
+                output_path = resolve_collision(output_path)
             actual_rel = str(output_path.relative_to(vault))
 
             # Build file content

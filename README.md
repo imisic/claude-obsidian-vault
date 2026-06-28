@@ -10,6 +10,8 @@ It ships with a **product-management preset** (products, markets, segments, OKRs
 
 This repository is a **sanitized, generic copy** of a real working system. All names, companies, emails, and data are fictional examples (the persona "Sam Rivera" at "Acme Corp"). Nothing here is anyone's real data. Make it yours by running `/w-setup` (see below).
 
+For the why and how behind it, read the writeup: [Claude + Obsidian as a second brain](https://ivanmisic.net/blog/ai-tools/claude-obsidian-second-brain).
+
 ## Contents
 
 - [What it does](#what-it-does)
