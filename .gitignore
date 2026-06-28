@@ -77,5 +77,8 @@ _attachments/*.md
 _attachments/screenshots/*
 !_attachments/screenshots/.gitkeep
 
-# Internal working notes (kept locally, not part of the published template)
-docs/audit/
+# Internal working notes: docs/ subfolders are local-only by default.
+# Covers audit notes and brainstorming specs (docs/superpowers/), etc.
+# Top-level docs files (e.g. docs/plugins.md) stay tracked.
+# To publish a specific subfolder, add a negation like !docs/published/.
+docs/*/
