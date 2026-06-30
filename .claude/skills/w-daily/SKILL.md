@@ -14,6 +14,8 @@ argument-hint: "[YYYY-MM-DD] [lite] [--upgrade-deferred]"
 
 The default (`/w-daily` with no args, or just a date) is unchanged: a full run. `lite` is purely additive and only changes how transcripts are handled; emails, docs, daily notes, and briefings are identical to a full run.
 
+A normal full run with several recorded meetings (at/above `ETA_DEFER_OFFER_MIN_TRANSCRIPTS` transcripts, default 3) now **pauses once** in Phase 1.7 to offer the same synthesize/defer choice, so a transcript-heavy morning is no longer silently committed to a long synthesis. Picking `all` reproduces the old full-run behavior. Light days (below the threshold, no `lite`) are unaffected and run straight through.
+
 This is the master morning command. It ingests the inbox and builds the daily note.
 Email pulling from OneDrive is handled by a Windows scheduled task (`_scripts/Pull-Emails.ps1`) that runs every 15 minutes. Emails are already in `00-Inbox/` by the time this runs.
 
@@ -154,7 +156,7 @@ Contains detailed per-email data needed for agent prompts:
 
 **Empty meeting preps** (`meeting_preps[]` where `has_meeting_content: false`): Only handle here if no matching transcript exists (checked in Phase 4.3). If no transcript AND no content → delete + log as `skipped-empty` immediately.
 
-## Phase 1.7: Upfront heads-up + lite-mode transcript choice
+## Phase 1.7: Upfront heads-up + synthesize/defer choice
 
 `classify-inbox.py` adds an `eta` block to its compact summary: `{ full_minutes, lite_minutes, slow, breakdown[] }`, plus per-transcript `stakes` (substantive/low-stakes) and `est_minutes` in `transcripts[]`. This is the one point where the full inbox inventory is known **before** any slow Phase 2 agent runs. The estimates are deterministic and tunable (constants in `classify-inbox.py`); treat them as rough.
 
@@ -166,7 +168,7 @@ Inbox: 4 emails, 2 transcripts, 1 doc. Estimated full run ~13 min (lite ~2 min).
 ```
 If `eta.slow` is false (a quiet morning under the threshold), print nothing extra and proceed. This keeps the default fast-path experience unchanged.
 
-**Lite mode only:** after the heads-up, present the transcripts and ask which to synthesize now, using the compact `transcripts[]` (subject, meeting_type, stakes, est_minutes):
+**Synthesize/defer choice (lite mode, or a heavy full run):** present this choice whenever **`lite` is in args OR `eta.defer_offer` is true** (the classifier sets `defer_offer` at/above `ETA_DEFER_OFFER_MIN_TRANSCRIPTS` transcripts, default 3). Below the threshold and not `lite`, skip this prompt and synthesize every transcript as before, so light days stay zero-friction. After the heads-up, present the transcripts and ask which to synthesize now, using the compact `transcripts[]` (subject, meeting_type, stakes, est_minutes):
 ```
 Synthesize which transcripts now?  [all / none / substantive-only / pick]
 ```
@@ -175,7 +177,7 @@ Synthesize which transcripts now?  [all / none / substantive-only / pick]
 - `substantive-only` → SYNTH_NOW = transcripts with `stakes: substantive`; DEFER = the rest.
 - `pick` → list transcripts with an index and let the user choose; chosen → SYNTH_NOW, the rest → DEFER.
 
-Record SYNTH_NOW and DEFER (by transcript `file` / `output_filename`). Step 2.0 executes them. Ask this once, here, so the rest of the run is unattended. If lite mode has zero transcripts, there is nothing to ask; proceed as a normal run.
+Record SYNTH_NOW and DEFER (by transcript `file` / `output_filename`). Step 2.0 executes them. Ask this once, here, so the rest of the run is unattended. If there are zero transcripts, there is nothing to ask; proceed as a normal run.
 
 ## Phase 1.5: Inline processing (skip agent overhead where possible)
 
@@ -260,14 +262,14 @@ When triggered, process email batches **sequentially** (not all in parallel) to 
 
 Dispatch agents only for content NOT already handled inline in Phase 1.5.
 
-### Step 2.0: Lite-mode transcript split (lite only)
+### Step 2.0: Transcript synthesize/defer split
 
-In **lite mode**, do NOT dispatch every transcript. Use the SYNTH_NOW / DEFER sets recorded in Phase 1.7:
+Runs **whenever the DEFER set from Phase 1.7 is non-empty** (lite mode, or a heavy full run where the user chose to defer some transcripts). Use the SYNTH_NOW / DEFER sets recorded in Phase 1.7:
 - **SYNTH_NOW transcripts**: dispatch normally via Step 2.1 below (same agent path, same quality).
 - **DEFER transcripts**: do NOT dispatch an agent. Build a thin stub note for each (shape below). Step 2.2 writes them via `write-notes.py`, which also moves the raw transcript + companions to `_attachments/`.
-- Emails and docs are unaffected by lite mode and proceed exactly as in a full run.
+- Emails and docs are unaffected and proceed exactly as in a full run.
 
-A full run (no `lite`) skips this step: all transcripts go through Step 2.1.
+If DEFER is empty (a normal light day, or the user picked `all`): skip this step; all transcripts go through Step 2.1.
 
 **Deferred-stub output file** (one `notes[]` entry per deferred transcript; build each from its manifest `transcripts[]` entry). Write the whole thing to `_db/transcript-out-deferred.json`, the **same `{notes[], log_entries[]}` shape and naming family as a transcript agent's output file**. Do NOT call `write-notes.py` here: Step 2.2's batched `--inputs` pass writes this file alongside the SYNTH_NOW agent outputs, and Phase 5 reads the same files, so a deferred meeting flows through the identical path and appears (flagged) in the daily note. The file:
 ```json

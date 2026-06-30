@@ -1267,6 +1267,12 @@ ETA_CONTENTION_FACTOR = 0.5     # >2 transcripts run in parallel but share one
                                 # Sonnet throughput pool, so wall-clock grows
                                 # with the rest, not just the slowest
 ETA_SLOW_THRESHOLD_MIN = 2.0    # below this, /w-daily prints no heads-up line
+ETA_DEFER_OFFER_MIN_TRANSCRIPTS = 3  # at/above this transcript count, a normal
+                                     # (non-lite) run also pauses once for the
+                                     # synthesize/defer choice. Distinct from
+                                     # ETA_SLOW_THRESHOLD_MIN (the slow heads-up,
+                                     # which trips on a single transcript and is
+                                     # too sensitive to gate deferral on).
 
 LOW_STAKES_SUBJECT_PREFIXES = (
     "lecture", "training", "webinar", "tutorial", "onboarding", "demo",
@@ -1378,6 +1384,10 @@ def estimate_eta(result: dict, counts: dict) -> dict:
         "full_minutes": int(round(full_min)),
         "lite_minutes": int(round(lite_min)),
         "slow": full_min > ETA_SLOW_THRESHOLD_MIN,
+        "transcript_count": n_t,
+        # A normal run also pauses for the synthesize/defer choice at/above the
+        # threshold. Kept independent of `slow` (which trips on a single slow item).
+        "defer_offer": n_t >= ETA_DEFER_OFFER_MIN_TRANSCRIPTS,
         "breakdown": breakdown,
     }
 
