@@ -493,6 +493,9 @@ def main():
             atomic_text_write(output_path, content)
 
             result["written"].append(actual_rel)
+            # Record the actual on-disk path (post collision resolution) so the
+            # deferred-source correction pass below can rewrite this exact file.
+            note["_written_path"] = output_path
 
             # Update output-file in corresponding log entry
             for entry in log_entries:
@@ -519,6 +522,14 @@ def main():
                     dest = resolve_collision(attachments_dir / src_path.name)
                     shutil.move(str(src_path), str(dest))
                     result["moved_to_attachments"].append(str(dest.relative_to(vault)))
+                    # A deferred stub's deferred-source was predicted as
+                    # _attachments/<name>.txt before this move. If <name>.txt already
+                    # existed, the raw transcript actually landed at <name>-N.txt.
+                    # Record the true destination so the correction pass can fix the
+                    # stub (otherwise --upgrade-deferred synthesizes the wrong file).
+                    if (note.get("frontmatter", {}).get("status") == "deferred"
+                            and src_path.suffix.lower() == ".txt"):
+                        note["_deferred_moved_dest"] = str(dest.relative_to(vault))
                     # Move sibling Meeting Recorder companions alongside the source.
                     # They share the same stem and carry canonical metadata/preview the
                     # transcript was generated from, worth keeping with the original.
@@ -543,6 +554,34 @@ def main():
             except Exception as e:
                 action = "move" if move_to_attach else "delete"
                 result["errors"].append(f"Failed to {action} {src}: {e}")
+
+    # Correct deferred-source on any deferred stub whose raw transcript moved to a
+    # collision-suffixed path. The stub was written earlier this run with a predicted
+    # deferred-source (_attachments/<name>.txt); if <name>.txt already existed, the
+    # real file is <name>-N.txt. Point the stub at the actual file so
+    # --upgrade-deferred synthesizes the right transcript, not a stale pre-existing
+    # one. Re-serializing is safe: the stub body is a static callout with no tasks,
+    # so no hygiene/sanitize re-run is needed.
+    for note in notes:
+        fm = note.get("frontmatter", {})
+        if fm.get("status") != "deferred":
+            continue
+        actual = note.get("_deferred_moved_dest")
+        written = note.get("_written_path")
+        if not actual or not written or fm.get("deferred-source") == actual:
+            continue
+        fm["deferred-source"] = actual
+        body = note.get("body_text") or note.get("body") or ""
+        try:
+            atomic_text_write(Path(written), f"---\n{frontmatter_to_yaml(fm)}\n---\n\n{body}\n")
+            result["warnings"].append(
+                f"{note.get('output_path', '?')}: deferred-source corrected to {actual} "
+                f"(attachment basename collision)"
+            )
+        except Exception as e:
+            result["errors"].append(
+                f"Failed to correct deferred-source for {note.get('output_path', '?')}: {e}"
+            )
 
     # Move screenshots into _attachments/screenshots/<stem>/ alongside the transcript.
     # The wikilinks in the body were rewritten to reference this final path during
