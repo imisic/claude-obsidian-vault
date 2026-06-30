@@ -669,18 +669,40 @@ root files into a `w-daily:` commit. Scope to the directories `/w-daily` writes:
 ```bash
 cd "$VAULT"
 
-# Allowlist: only the content trees /w-daily touches (notes, stubs, attachments,
-# indexes, and inbox deletions of processed emails). Excludes .claude, _scripts,
-# _templates, _bases, and root files, those get committed explicitly.
-git add 00-Inbox 01-Daily 03-Projects 04-People 05-Interactions \
-        07-Areas 08-Reference 09-Archive _attachments _db
-# Drop the calendar snapshot: rewritten every email pull, not a run output.
-git reset -q -- 00-Inbox/*-calendar.json
+# Clear a provably-stale git index lock before any index write. An interrupted
+# background git process (commonly the Obsidian Git plugin's auto-backup) leaves
+# .git/index.lock behind, which blocks every later git write. Judge staleness by
+# AGE ALONE: in a small personal vault no legitimate index operation holds the
+# index for minutes. (Do NOT add a `pgrep git` check: it is machine-global, so an
+# unrelated git anywhere both false-positives and refuses to clear a genuinely
+# stale lock in this repo.)
+lock_status="ok"
+if [ -f .git/index.lock ]; then
+    if [ -n "$(find .git/index.lock -mmin +5 2>/dev/null)" ]; then
+        rm -f .git/index.lock          # >5 min old: stale, safe to remove
+        lock_status="stale-cleared"
+    else
+        lock_status="busy-deferred"    # <5 min: a write may be in progress
+    fi
+fi
+echo "lock_status=$lock_status"
 
-# Commit only if the run actually staged something (the working tree may be
-# dirty with nothing but the excluded calendar file).
-if ! git diff --cached --quiet; then
-    git commit -m "w-daily: $TARGET_DATE"
+# busy-deferred: a write may be in flight. Skip the commit AND the push this run;
+# the working tree is safe on disk and the next run retries. Never hard-fail.
+if [ "$lock_status" != "busy-deferred" ]; then
+    # Allowlist: only the content trees /w-daily touches (notes, stubs, attachments,
+    # indexes, and inbox deletions of processed emails). Excludes .claude, _scripts,
+    # _templates, _bases, and root files, those get committed explicitly.
+    git add 00-Inbox 01-Daily 03-Projects 04-People 05-Interactions \
+            07-Areas 08-Reference 09-Archive _attachments _db
+    # Drop the calendar snapshot: rewritten every email pull, not a run output.
+    git reset -q -- 00-Inbox/*-calendar.json
+
+    # Commit only if the run actually staged something (the working tree may be
+    # dirty with nothing but the excluded calendar file).
+    if ! git diff --cached --quiet; then
+        git commit -m "w-daily: $TARGET_DATE"
+    fi
 fi
 ```
 
@@ -688,21 +710,23 @@ fi
 
 ```bash
 unpushed=$(git rev-list --count origin/main..HEAD 2>/dev/null)
-if [ "${unpushed:-0}" -gt 0 ]; then
+if [ "$lock_status" != "busy-deferred" ] && [ "${unpushed:-0}" -gt 0 ]; then
     push_output=$(git push origin main 2>&1)
     push_status=$?
 else
-    push_status=0  # nothing to push, treat as success
+    push_status=0  # nothing to push (or commit/push deferred), treat as success
 fi
 ```
 
 ### Step 6.3: Categorize result for Phase 7
 
+- `lock_status == stale-cleared` → include "git: cleared a stale index.lock" in the report
+- `lock_status == busy-deferred` → include "git: commit/push deferred (index.lock busy, retries next run)"; skip the in-sync/pushed lines below
 - `unpushed == 0` → include "git: in sync" in Phase 7 report
 - Push succeeded → include "git: pushed N commits"
 - Push failed → include the raw `push_output` in the report (e.g. SSH key not loaded, network unreachable)
 
-**Never fail the skill run if push fails.** Data is safe on local disk; push retries next run.
+**Never fail the skill run if push fails or the lock is busy.** Data is safe on local disk; both retry next run.
 
 ## Phase 7: Report to user
 
