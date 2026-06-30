@@ -124,7 +124,7 @@ Contains everything needed for orchestration decisions:
 - `manifest_file`: path to full manifest
 - `counts`: file type counts
 - `emails[]`: compact: `{file, subject, date, pre_relevance, direction, vip_involved, output_filename, thread_id}`
-- `transcripts[]`: compact: `{file, subject, date, meeting_type, output_filename}`
+- `transcripts[]`: compact: `{file, subject, date, meeting_type, stakes, est_minutes, output_filename}`
 - `definitive_lows[]`: compact: `{file, subject, date, low_reason}`
 - `pre_skipped[]`, `skipped_transcripts[]`, `manual_notes[]`, `manual_meetings[]`, `meeting_preps[]`, `docs[]`, `skipped[]`
 - `thread_count`, `threads_with_existing[]`: threads that have >1 email or existing notes
@@ -158,7 +158,7 @@ Contains detailed per-email data needed for agent prompts:
 
 ## Phase 1.7: Upfront heads-up + synthesize/defer choice
 
-`classify-inbox.py` adds an `eta` block to its compact summary: `{ full_minutes, lite_minutes, slow, breakdown[] }`, plus per-transcript `stakes` (substantive/low-stakes) and `est_minutes` in `transcripts[]`. This is the one point where the full inbox inventory is known **before** any slow Phase 2 agent runs. The estimates are deterministic and tunable (constants in `classify-inbox.py`); treat them as rough.
+`classify-inbox.py` adds an `eta` block to its compact summary: `{ full_minutes, lite_minutes, slow, transcript_count, defer_offer, breakdown[] }`, plus per-transcript `stakes` (substantive/low-stakes) and `est_minutes` in `transcripts[]`. This is the one point where the full inbox inventory is known **before** any slow Phase 2 agent runs. The estimates are deterministic and tunable (constants in `classify-inbox.py`); treat them as rough.
 
 **Heads-up (both modes):** If `eta.slow` is true (full estimate over the ~2 min threshold), print one short line to the user before continuing, e.g.:
 ```
@@ -172,10 +172,12 @@ If `eta.slow` is false (a quiet morning under the threshold), print nothing extr
 ```
 Synthesize which transcripts now?  [all / none / substantive-only / pick]
 ```
-- `all` → every transcript synthesized now (SYNTH_NOW = all).
-- `none` → every transcript deferred (DEFER = all).
-- `substantive-only` → SYNTH_NOW = transcripts with `stakes: substantive`; DEFER = the rest.
-- `pick` → list transcripts with an index and let the user choose; chosen → SYNTH_NOW, the rest → DEFER.
+- `none` → defer all; the daily note + emails land fast and you upgrade transcripts later with `--upgrade-deferred`. Best when you just need the daily note now (DEFER = all).
+- `pick` → list transcripts with an index and choose which to synthesize now; chosen → SYNTH_NOW, the rest → DEFER. Best when only one or two meetings matter today.
+- `all` → synthesize everything now (the old full-run behavior; SYNTH_NOW = all).
+- `substantive-only` → SYNTH_NOW = transcripts with `stakes: substantive`, DEFER = the rest. Only saves time when the list actually shows `low-stakes` transcripts; with an all-substantive list it defers nothing (identical to `all`).
+
+When presenting the choice, surface which transcripts (if any) are `low-stakes`, so the user can see at a glance whether `substantive-only` saves anything. There is no single "right" pick; it depends on what the user needs from this run.
 
 Record SYNTH_NOW and DEFER (by transcript `file` / `output_filename`). Step 2.0 executes them. Ask this once, here, so the rest of the run is unattended. If there are zero transcripts, there is nothing to ask; proceed as a normal run.
 

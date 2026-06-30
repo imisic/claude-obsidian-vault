@@ -1276,7 +1276,25 @@ ETA_DEFER_OFFER_MIN_TRANSCRIPTS = 3  # at/above this transcript count, a normal
 
 LOW_STAKES_SUBJECT_PREFIXES = (
     "lecture", "training", "webinar", "tutorial", "onboarding", "demo",
+    "demonstration", "walkthrough",
 )
+# Subjects whose LAST word is one of these are low-stakes even when the marker
+# is not the prefix (e.g. "... System Demonstration"). Kept deliberately narrow:
+# matching markers mid-subject would wrongly defer real meetings (e.g. a budget
+# review whose title merely contains "training").
+LOW_STAKES_SUBJECT_TRAILERS = frozenset({"demonstration", "demo", "walkthrough"})
+
+# Strip a leading date token and a leading generic meeting prefix before matching,
+# so "06-30 Meeting: Tool Demonstration" normalizes to "tool demonstration".
+_STAKES_DATE_PREFIX = re.compile(r"^(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2})\s+")
+_STAKES_GENERIC_PREFIX = re.compile(r"^(?:weekly\s+)?(?:meeting|sync|call)\s*[:\-]?\s+")
+
+
+def _normalize_subject_for_stakes(subject: str) -> str:
+    s = (subject or "").strip().lower()
+    s = _STAKES_DATE_PREFIX.sub("", s)
+    s = _STAKES_GENERIC_PREFIX.sub("", s)
+    return s.strip()
 
 
 def _duration_to_seconds(duration: str) -> int:
@@ -1300,18 +1318,26 @@ def classify_transcript_stakes(transcript_meta: dict) -> str:
     """Classify a transcript as 'low-stakes' or 'substantive'.
 
     Low-stakes = a passive knowledge-transfer recording the owner can safely
-    defer: the subject begins with a learning marker AND it is not a 1on1 or
-    steerco. Mirrors the Model-triage signal documented in w-daily/SKILL.md.
-    'Passive attendee' can't be known before synthesis, so meeting-type
-    (1on1/steerco are never low-stakes) stands in as a deterministic proxy.
+    defer: the (normalized) subject begins with a learning marker, OR its last
+    word is a demo/walkthrough noun, AND it is not a 1on1 or steerco. Mirrors
+    the Model-triage signal documented in w-daily/SKILL.md. 'Passive attendee'
+    can't be known before synthesis, so meeting-type (1on1/steerco are never
+    low-stakes) stands in as a deterministic proxy.
+
+    Conservative by design: marker matching is anchored to the prefix or the
+    trailing noun, never mid-subject, so a real meeting whose title merely
+    contains a marker word (e.g. "Q3 training budget review") stays substantive.
     """
     meeting_type = (transcript_meta.get("meeting_type") or "general").lower()
     if meeting_type in ("1on1", "steerco"):
         return "substantive"
-    subject = (transcript_meta.get("subject") or "").strip().lower()
-    for marker in LOW_STAKES_SUBJECT_PREFIXES:
-        if subject.startswith(marker):
-            return "low-stakes"
+    subject = _normalize_subject_for_stakes(transcript_meta.get("subject", ""))
+    if not subject:
+        return "substantive"
+    if subject.startswith(LOW_STAKES_SUBJECT_PREFIXES):
+        return "low-stakes"
+    if subject.split()[-1] in LOW_STAKES_SUBJECT_TRAILERS:
+        return "low-stakes"
     return "substantive"
 
 
