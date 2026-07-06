@@ -3,7 +3,7 @@
 audit-tasks.py: Audit and fix action items in interaction notes.
 
 Delegates per-line transformation to apply_task_hygiene() in utils.py so the
-deterministic rules live in one place (shared with write-notes.py).
+deterministic rules live in one place (shared with finalize.py).
 
 Transformations applied:
 - Sam-owned or already-delegated: only stamp [created::] when missing

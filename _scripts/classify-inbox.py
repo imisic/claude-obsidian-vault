@@ -1816,9 +1816,9 @@ def main():
     # interaction note created by an earlier /w-daily run on the same day
     # (e.g. Plaud arrives hours after Meeting Recorder finished the same call).
     # Conservative: same date + duration within 5% + ≥70% non-Sam attendee
-    # overlap of the smaller set. Flags only; does NOT auto-skip. write-notes
+    # overlap of the smaller set. Flags only; does NOT auto-skip. finalize
     # is the wrong place to throw away content. The flag rides in the manifest
-    # so the transcript-processor agent and the briefing layer can react.
+    # so the note-writing agent and the briefing layer can react.
     if result["transcripts"]:
         interactions_root = vault / "05-Interactions"
 
