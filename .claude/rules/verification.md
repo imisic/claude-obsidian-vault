@@ -1,6 +1,6 @@
 ## Verification and Anti-Fabrication
 
-Shared rule for every skill and agent that resolves entities, extracts actions or decisions, or synthesizes notes, briefings, reviews, and prep. Referenced by `entity-matching.md`, the processor skills (email, doc, transcript), and the synthesis skills (review, 1on1-prep, project-status). The forked processor agents are told not to read rules at runtime, so the relevant guard is inlined in each of their SKILL.md files; this file is the canonical statement and the home to update.
+Shared rule for every skill and agent that resolves entities, extracts actions or decisions, or synthesizes notes, briefings, reviews, and prep. Referenced by `entity-matching.md`, the note-writing prompt templates (`.claude/skills/w-daily/prompts/{transcript,email,doc}-note.md`), and the synthesis skills (review, 1on1-prep, project-status). Note-writing agents are told not to read rules at runtime, so the relevant guard is distilled directly into each template's own "No fabrication" section; this file is the canonical statement and the home to update.
 
 ### Three hard rules
 

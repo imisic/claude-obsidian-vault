@@ -18,7 +18,7 @@ source-file: 2026-03-02-meeting-northwind-intro.md
 
 # General, [[Project-Alpha]], 2026-03-02
 
-> [!example] Example meeting note (`meeting-type: general`, cleaned from a manual meeting note by the transcript-processor / `/w-daily`). Note the external stub contact [[Hannah-Vogel]]. Fictional demo data. Replace or delete. See README → "Example content".
+> [!example] Example meeting note (`meeting-type: general`, cleaned from a manual meeting note by `/w-daily`). Note the external stub contact [[Hannah-Vogel]]. Fictional demo data. Replace or delete. See README → "Example content".
 
 ## Discussion
 - [[Hannah-Vogel]] walked through Northwind's DE fulfillment coverage; fits [[Orion]]'s pilot footprint.

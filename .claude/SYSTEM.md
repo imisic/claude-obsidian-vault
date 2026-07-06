@@ -12,7 +12,7 @@ This is an Obsidian-based personal knowledge management system for a knowledge w
 
 - Skills orchestrate and execute, Rules define standards
 - `/w-daily` is the single entry point for all ingestion
-- Processor agents run on Sonnet (volume), synthesis agents on Opus (quality)
+- Note-writing agents run on Sonnet (or Haiku for low-stakes transcripts); synthesis agents on Opus (quality)
 - Entity registry (`_db/entity-registry.json`) is the single source of truth for linking
 - Owner identity (slug, name, company, emails, timezone) lives in one place: the `OWNER CONFIG` block in `_scripts/utils.py`; every script imports it
 - Action item checkboxes live ONLY in interaction/project/org notes. Daily notes render plain-text references from final note bodies without duplicating checkboxes
@@ -68,45 +68,45 @@ A meeting recorder or transcription tool (optional, bring your own)
     → Saves a structured transcript with meeting metadata to 00-Inbox/
 
 User runs /w-daily
-    → Phase 0: Bootstrap registry if missing, refresh indexes (incremental: fast no-op if nothing changed).
-                thread-index: only scans new notes; email-lookup: skips if registry unchanged; ingest-log audit: weekly only
-    → Phase 1: Run classify-inbox.py --clean-bodies --sanitize-pii --resolve-entities --thread-index (scripted).
-                Classifies, parses headers, cleans email bodies, sanitizes PII (emails/phones → tokens),
-                resolves all entities to wikilinks+VIP, pre-generates frontmatter+filenames, groups threads,
-                detects duplicates, plans batches.
-                Full manifest → _db/manifest.json (~50KB). Compact summary → stdout (~2KB).
-                Master reads summary into context; reads manifest file only for targeted agent prompts.
-    → Phase 1.5.1: Run create-stubs.py (scripted). Creates person stubs from unresolved entities,
-                updates entity-registry, email-lookup, and sanitize-mappings. Also resurrects any
-                previously-archived people who reappear in the inbox: moves their file from
-                04-People/_archived/ back to 04-People/, clears status=archived in the registry,
-                and logs a RESURRECT row in people-archive-analysis.csv.
-    → Phase 1.6: Handle definitive LOWs (pre-scored by script), skipped transcripts ([Recovered]),
-                 empty meeting preps: log + delete sources without LLM work.
-    → Phase 1.7: Print an ETA heads-up when the run will be slow (estimate from classify-inbox.py).
-                 Ask which transcripts to synthesize now vs defer in lite mode, OR on a
-                 heavy full run (at/above ETA_DEFER_OFFER_MIN_TRANSCRIPTS, default 3).
-    → Phase 1.5a: If ≤6 emails + no complex threads, process emails inline (decoupled from transcripts/docs).
-                  Reads cleaned_body from manifest, builds structured JSON, calls write-notes.py.
-    → Phase 1.5b: If ≤3 docs, convert inline via markitdown (skip doc agent)
-    → Phase 1.9: If >20 emails (backlog), process batches sequentially with progress reporting
-    → Phase 2: Invoke processor agents in parallel (Sonnet), only for content NOT handled inline
-                ├── email-processor (only if >6 emails or complex threads) → returns structured JSON
-                ├── doc-processor (only if >3 docs) → writes files directly
-                └── transcript-processor (always dispatched as agent; when you defer some
-                    transcripts (lite mode or a heavy full run), only the chosen ones run,
-                    the rest become deferred stub notes) → returns structured JSON
-    → Phase 2.2: For each agent return, call write-notes.py to write notes + update ingest-log
-    → Phase 3: Post-process (create people stubs, update registry, validate notes)
-    → Phase 4: Create daily notes per date, clean/condense/merge manual notes (never raw copy-paste)
-    → Phase 5: Generate daily briefings from briefing_data[] + final note bodies
-                (actions are read from final written notes after task hygiene)
-    → Phase 6: Report to user
+    → Step 1 (prepare.py): single pre-dispatch entry point. One call runs index refresh
+                (thread-index incremental, email-lookup self-skips if registry unchanged),
+                optional Plaud pull + calendar archive + transcript enrichment, stages the inbox
+                into _processing/, then classifies via classify-inbox.py (parse headers, clean bodies,
+                sanitize PII (emails/phones → tokens), resolve entities to wikilinks+VIP,
+                pre-generate frontmatter+filenames, group threads, detect duplicates, plan batches,
+                compute ETA) and creates person stubs via create-stubs.py (also resurrects any
+                previously-archived people who reappear). Full manifest → _db/manifest.json;
+                one compact run-plan JSON → stdout (counts, batch plan, ETA, and any staged-note
+                leftovers from a prior crashed run).
+    → Step 2: Dispatch content work. Note-writing agents apply the prompt templates in
+                .claude/skills/w-daily/prompts/ and Write finished markdown notes (YAML + body)
+                into _db/staged-notes/<output_filename> (never JSON envelopes):
+                ├── transcripts: one agent each (Sonnet, or Haiku when the manifest marks it
+                │     low-stakes), prompt = transcript-note.md + the manifest slice
+                ├── emails: ≤10 with no wide thread → applied inline by the master; larger backlogs
+                │     → batch agents (~10 each) using email-note.md
+                └── docs: ≤3 → inline via doc-note.md; more → one agent with doc-note.md + slices
+                Manual notes / manual meetings / meeting preps are handled inline per ingestion.md.
+    → Step 3 (finalize.py): deterministic post-pass, manifest-driven. Validates each staged note
+                (schema, PII leaks, YAML), applies task hygiene + [created::], moves notes into
+                05-Interactions/YYYY/ or 08-Reference/ (renaming on an agent-corrected meeting-type),
+                moves/deletes sources + companions per originals policy, writes the ingest-log,
+                updates the thread index, and rebuilds open-actions.json. Folds the old
+                validate-notes.py and update-thread-index.py.
+    → Step 4: Author per-date briefing overrides (the sign-off line + `## Attention needed` bullets;
+                an unattended run uses the default sign-off).
+    → Step 5 (briefe.py): rebuild each touched day's briefing from ALL of that date's notes on disk
+                (imports build-daily-briefings.py as its render library), preserving the LLM-authored
+                Attention-needed + sign-off. A rerun can never clobber a past day.
+    → Step 6 (finish.py): git phase. Stale-lock guard, allowlist-stage the content trees, commit only
+                when something is staged, push only when there are unpushed commits. Push failure is
+                categorized, never fatal.
+    → Step 7: Report to user, clean up staging.
 ```
 
 **Outputs:** Interaction notes in `05-Interactions/YYYY/`, reference docs in `08-Reference/`, person stubs in `04-People/`, daily notes in `01-Daily/YYYY/`
 
-**Run modes:** `/w-daily` (full, default), `/w-daily lite` (emails + docs full, transcripts deferred to thin `status: deferred` stub notes that you choose per run; raw transcript parked in `_attachments/`), and `/w-daily --upgrade-deferred` (synthesize deferred stubs in place via Phase U, then rebuild affected daily briefings). The slow-run ETA prints on full and lite runs alike, only when `classify-inbox.py` estimates more than ~2 minutes. A normal full run with several recorded meetings (at/above `ETA_DEFER_OFFER_MIN_TRANSCRIPTS`, default 3) also pauses once for the same synthesize/defer choice, so a transcript-heavy morning is no longer silently committed to a long synthesis; picking `all` reproduces the old full run. See `.claude/skills/w-daily/SKILL.md` Phases 1.7, 2.0, and U.
+**Run mode:** `/w-daily [YYYY-MM-DD]` runs the full pipeline (defaults to today). When `classify-inbox.py` estimates a slow run (transcript-heavy), Step 1 prints a one-line ETA heads-up (counts + estimated minutes + per-transcript breakdown); it does not pause. See `.claude/skills/w-daily/SKILL.md`.
 
 ---
 
@@ -117,20 +117,22 @@ User runs /w-daily
 | Skill            | Command                                       | What it does                          | Creates                               |
 | ---------------- | --------------------------------------------- | ------------------------------------- | ------------------------------------- |
 | w-setup          | `/w-setup`                                    | Setup wizard: interview → configure vault | utils.py owner block, registry, notes |
-| w-daily          | `/w-daily [YYYY-MM-DD] [lite] [--upgrade-deferred]` | Master ingestion + daily note builder (lite defers transcripts; upgrade synthesizes deferred ones later) | Daily notes, interaction notes, stubs |
+| w-daily          | `/w-daily [YYYY-MM-DD]`                        | Master ingestion + daily note builder | Daily notes, interaction notes, stubs |
 | w-review         | `/w-review weekly\|monthly\|last N days\|...` | Period review with vault analysis     | Weekly/monthly review notes           |
 | w-1on1           | `/w-1on1 [Person Name]`                       | 1on1 meeting prep                     | Pre-populated meeting note            |
 | w-project-status | `/w-project-status [Name]`                    | Project/product status summary (Opus) | Inline report (no file)               |
 | w-prep           | `/w-prep [person/topic] [last wk]`            | Conversation prep (fwd) or "what I did" recap (retro), cross-repo (Opus) | Inline brief; optional 00-Inbox prep note |
 | w-task-audit     | `/w-task-audit [--fix]`                       | Action item hygiene audit             | Inline report, optional fixes         |
 
-### Internal Processor Agents (Sonnet)
+### Note-writing Agents (Sonnet / Haiku)
 
-| Agent                | Model             | Tools     | Input                                                         | Output                                                                         |
-| -------------------- | ----------------- | --------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| email-processor      | Sonnet 4.6 (fork) | Read only | Manifest (cleaned bodies, resolved entities, frontmatter)     | Structured JSON: `{ notes[], log_entries[], briefing_data[], new_entities[] }` |
-| doc-processor        | Sonnet 4.6 (fork) | All       | Batch of document files                                       | Writes reference notes directly, returns plain-text summary                    |
-| transcript-processor | Sonnet 4.6 (fork) | Read only | Manifest (resolved attendees, frontmatter) + transcript files | Structured JSON: `{ notes[], log_entries[], briefing_data[], new_entities[] }` |
+These are standard `general-purpose` Agent dispatches (not context forks). Each is driven by a prompt template in `.claude/skills/w-daily/prompts/`; the agent applies the template to its manifest slice and Writes a finished markdown note (YAML frontmatter + body) into `_db/staged-notes/<output_filename>`, returning a one-line `NOTE: <path>` or `SKIP: <reason>`. No JSON envelopes: `finalize.py` picks the staged notes up. The master handles small inline batches (≤10 emails, ≤3 docs) itself with the same templates instead of dispatching an agent.
+
+| Template            | Model                        | Input (manifest slice)                                   | Output                                                            |
+| ------------------- | ---------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------- |
+| `transcript-note.md`| Sonnet (Haiku if low-stakes) | Resolved attendees, frontmatter + PII-tokenized transcript body (`agent_file`) | Staged meeting note in `_db/staged-notes/`                        |
+| `email-note.md`     | Sonnet (batch) / inline      | Cleaned body, resolved entities, frontmatter             | Staged email note (or `SKIP:` for LOW/merged)                    |
+| `doc-note.md`       | Sonnet / inline              | Document file path + conversion rules                    | Staged reference note in `_db/staged-notes/`                     |
 
 ### Internal Synthesis Agents (Opus)
 
@@ -147,13 +149,13 @@ All in `.claude/rules/` (auto-loaded into context).
 
 | Rule file                 | What it defines                                                                                                                                                   | Used by                                        |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `ingestion.md`            | Content type detection, routing, meeting/reference frontmatter, file naming, originals policy, manual note processing, logging                                    | w-daily, all processors                        |
-| `ingestion-email.md`      | Email pulling, Power Automate format, email parsing rules, email frontmatter schema, tiered routing                                                               | email-processor, w-daily                       |
-| `email-preprocessing.md`  | Body cleaning (Teams footers, disclaimers, safe links), duplicate detection, relevance scoring (HIGH/MEDIUM/LOW waterfall), thread identification + consolidation | email-processor                                |
-| `entity-matching.md`      | Name/email → wikilink resolution, registry schema, domain → company mapping, Sam detection, stub creation threshold, recipient parsing                           | All processors                                 |
-| `vip.md`                  | VIP tier definitions (boss-chain/stakeholder/team), relevance boost rules, frontmatter tags, briefing markers                                                     | email-processor, transcript-processor, w-daily |
+| `ingestion.md`            | Content type detection, routing, meeting/reference frontmatter, file naming, originals policy, manual note processing, logging                                    | w-daily, note-writing agents                   |
+| `ingestion-email.md`      | Email pulling, Power Automate format, email parsing rules, email frontmatter schema, tiered routing                                                               | classify-inbox.py, w-daily                     |
+| `email-preprocessing.md`  | Body cleaning (Teams footers, disclaimers, safe links), duplicate detection, relevance scoring (HIGH/MEDIUM/LOW waterfall), thread identification + consolidation | classify-inbox.py, email-note.md               |
+| `entity-matching.md`      | Name/email → wikilink resolution, registry schema, domain → company mapping, Sam detection, stub creation threshold, recipient parsing                           | classify-inbox.py, note-writing agents         |
+| `vip.md`                  | VIP tier definitions (boss-chain/stakeholder/team), relevance boost rules, frontmatter tags, briefing markers                                                     | classify-inbox.py, note-writing agents, w-daily |
 | `obsidian-conventions.md` | Vault structure, frontmatter formats, action item rules (single source of truth), linking conventions, periodic note formats, archive policy                      | All skills                                     |
-| `verification.md`         | Anti-fabrication, no-false-absence, and verify-don't-trust rules for entity matching, extraction, and synthesis. Inlined into the forked processor skills (which do not read rules at runtime); referenced by the synthesis skills | All processors, review-agent, 1on1-prep, w-project-status |
+| `verification.md`         | Anti-fabrication, no-false-absence, and verify-don't-trust rules for entity matching, extraction, and synthesis. Distilled into each note-writing prompt template's "No fabrication" section (agents do not read rules at runtime); referenced by the synthesis skills | Note-writing agents, review-agent, 1on1-prep, w-project-status |
 
 ---
 
@@ -210,7 +212,7 @@ Fast lookup index for cross-batch thread matching. Maps ConversationId and norma
 
 ### `_db/email-lookup.json`
 
-Lightweight email→wikilink+VIP lookup extracted from entity-registry.json (~10KB vs the full registry). Used by inline processing (Phase 1.5) and email-processor (Phase D) for fast entity resolution. **Self-skips rebuild** if registry mtime < lookup mtime (no work if registry hasn't changed since last build).
+Lightweight email→wikilink+VIP lookup extracted from entity-registry.json (~10KB vs the full registry). Used by `classify-inbox.py` during entity resolution (and by the Plaud speaker resolver) for fast lookups. **Self-skips rebuild** if registry mtime < lookup mtime (no work if registry hasn't changed since last build).
 
 ### `_db/person-index.json`
 
@@ -277,14 +279,13 @@ Located in `_scripts/`.
 | `Install-EmailPullTask.ps1` | One-time manual (elevated PS)                     | Registers the scheduled task                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `check-environment.py`      | Called by `/w-setup`; runnable anytime            | Doctor: reports optional tools (markitdown, defuddle, Plaud CLI) AND vault integrity (`_db/` present, `entity-registry.json` and `ingest-log.json` parse), each with a fix hint. Stdlib-only; `--json` for the skill, `--strict` exits 1 on a failed required check. Nothing in optional tools is required to start: PDF/HTML/images/text process with zero installs                                                                                                                                                                                                              |
 | `apply-setup.py`            | Called by `/w-setup` Step 3                       | Deterministic writer for setup answers (`_db/setup-answers.json`): rewrites the marker-bounded `OWNER CONFIG` block in `utils.py`, builds `entity-registry.json` (owner + manager + VIPs + projects), repoints `bookmarks.json`, copies `.env` from example. Idempotent; prose edits are left to the `/w-setup` skill                                                                                                                          |
-| `classify-inbox.py`         | Called by `/w-daily` Phase 1                      | Full deterministic preprocessing: classification, header parsing, body cleaning (`--clean-bodies`), PII sanitization (`--sanitize-pii`), entity resolution (`--resolve-entities`), frontmatter+filename generation, thread grouping, duplicate detection, batch planning. Pre-scores definitive LOWs, filters recovered transcripts, checks meeting prep content. Bundles `cleaned_body` (sanitized) into manifest. Computes an `eta` block (full/lite run minutes + `slow` flag + `transcript_count` + `defer_offer` + per-item breakdown) and stamps each transcript with its `stakes` (substantive/low-stakes) for the heads-up and the synthesize/defer choice prompt (offered in lite mode or when `defer_offer` trips on a heavy full run). Low-stakes detection normalizes the subject (strips a leading date/generic-meeting prefix) and matches a learning marker as a prefix or a narrow trailing demo/walkthrough noun. Outputs full manifest to `_db/manifest.json` + compact summary to stdout |
-| `create-stubs.py`           | Called by `/w-daily` Phase 1.5.1                  | Reads manifest unresolved_entities, creates person stub files in `04-People/`, updates entity-registry.json, email-lookup.json, and sanitize-mappings.json. Applies stub threshold (≤5 recipients = file, >5 = registry-only). **Resurrects archived people**: if an inbound email matches a registry entry with `status=archived`, moves the file from `04-People/_archived/` back to `04-People/`, clears the status flag, and appends a `RESURRECT` row to `_db/people-archive-analysis.csv`. **Case-collision guard**: skips any unresolved entity whose filename collides case-insensitively with an existing person file (never appends a registry entry or writes the stub), surfacing it as `skipped_case_collision[]`. Prevents the case-insensitive-FS clobber where a transcript attendee slug like `Sam-Rivera` downcased to `sam-rivera` would overwrite the real `Sam-Rivera.md` |
-| `write-notes.py`            | Called by `/w-daily` Phase 1.5a, 2.2              | Central I/O handler for agent returns: takes structured JSON (from agents or inline), serializes YAML frontmatter, **applies `apply_task_hygiene()` per body line (stamps `[created::]`, auto-converts non-Sam tasks in large group settings to plain bullets, auto-adds `[delegated-by:: [[Sam-Rivera]]]` in 1on1s / small meetings / sent emails; VIP protection is per-task owner, not whole-note)**, writes notes with collision avoidance (`-2`, `-3` suffix; per-note `overwrite: true` bypasses it for in-place `/w-daily --upgrade-deferred` upgrades), deletes source files (or moves to `_attachments/` when `move_to_attachments: true`, which also writes deferred-transcript stubs and parks their raw files; if a stub's raw `.txt` basename collides in `_attachments/` and is suffixed `-N`, a correction pass rewrites the stub's `deferred-source` to the actual moved path so `--upgrade-deferred` synthesizes the right file), processes `skipped_log_entries` (log + delete source, OR move to `_attachments/` when the entry sets `move_to_attachments: true`, used for duplicate transcripts captured by a second device), updates ingest-log with dedup guard. Returns JSON `{ written[], deleted[], moved_to_attachments[], skipped_deleted[], logged, errors[], warnings[] }` |
-| `validate-notes.py`         | Called by `/w-daily` Phase 3.4                    | Type-aware validation: interaction notes require interaction fields; references require `date/type/source-file`; projects/workstreams/people use lighter schemas. Also lints interaction-note bodies for raw `@mentions`, leaked Dataview, and un-tokenized PII (email/phone in email bodies). Returns JSON pass/fail per note and is safe for vault-wide audits without treating people/projects like interactions. |
+| `prepare.py`                | Called by `/w-daily` Step 1                       | Single pre-dispatch entry point. Sequences the former Phase 0 + Phase 1 work in one process (internal parallelism): index refresh (`build-thread-index.py`, `build-email-lookup.py`), backup, ingest-log audit, optional Plaud pull + calendar archive + transcript enrichment, inbox staging into `_processing/`, then `classify-inbox.py` and `create-stubs.py`. Prints one compact run-plan JSON (classify summary, stubs, completeness warning, staged-note leftovers, warnings/errors). Exits non-zero only if classification itself fails |
+| `classify-inbox.py`         | Called by `prepare.py` (Step 1)                   | Full deterministic preprocessing: classification, header parsing, body cleaning (`--clean-bodies`), PII sanitization (`--sanitize-pii`), entity resolution (`--resolve-entities`), frontmatter+filename generation, thread grouping, duplicate detection, batch planning. Pre-scores definitive LOWs, filters recovered transcripts, checks meeting prep content. Bundles `cleaned_body` (sanitized) into manifest, and writes a PII-tokenized transcript working copy under `_db/agent-inputs/` (manifest `agent_file`). Computes an `eta` block (`full_minutes` + `slow` flag + `transcript_count` + per-item `breakdown`) and stamps each transcript with its `stakes` (substantive/low-stakes) for the ETA heads-up and Haiku routing of low-stakes recordings. Low-stakes detection normalizes the subject (strips a leading date/generic-meeting prefix) and matches a learning marker as a prefix or a narrow trailing demo/walkthrough noun. Outputs full manifest to `_db/manifest.json` + compact summary to stdout |
+| `create-stubs.py`           | Called by `prepare.py` (Step 1)                   | Reads manifest unresolved_entities, creates person stub files in `04-People/`, updates entity-registry.json, email-lookup.json, and sanitize-mappings.json. Applies stub threshold (≤5 recipients = file, >5 = registry-only). **Resurrects archived people**: if an inbound email matches a registry entry with `status=archived`, moves the file from `04-People/_archived/` back to `04-People/`, clears the status flag, and appends a `RESURRECT` row to `_db/people-archive-analysis.csv`. **Case-collision guard**: skips any unresolved entity whose filename collides case-insensitively with an existing person file (never appends a registry entry or writes the stub), surfacing it as `skipped_case_collision[]`. Prevents the case-insensitive-FS clobber where a transcript attendee slug like `Sam-Rivera` downcased to `sam-rivera` would overwrite the real `Sam-Rivera.md` |
+| `finalize.py`               | Called by `/w-daily` Step 3                       | Deterministic post-pass, manifest-driven. LLM agents Write finished markdown notes into `_db/staged-notes/`; finalize validates each (schema, YAML, PII leaks), **applies `apply_task_hygiene()` per body line (stamps `[created::]`, auto-converts non-Sam tasks in large group settings to plain bullets, auto-adds `[delegated-by:: [[Sam-Rivera]]]` in 1on1s / small meetings / sent emails; VIP protection is per-task owner, not whole-note)**, moves each note to its `05-Interactions/YYYY/` or `08-Reference/` home (renaming on an agent-corrected `meeting-type`; `-2`/`-3` collision suffix), moves/deletes sources + companions per the originals policy, updates the ingest-log with a dedup guard (including manifest `definitive_lows`/`pre_skipped`/`skipped_transcripts`), appends to the thread index, and rebuilds `open-actions.json`. Folds the former `validate-notes.py` (schema + body lint for raw `@mentions`, leaked Dataview, un-tokenized PII) and `update-thread-index.py`. The agent's frontmatter text is authoritative and kept verbatim except a surgical summary patch. Returns JSON per note (written / quarantined / moved / errors) |
 | `check-ingest-log.sh`       | Called by `/w-daily` Phase 0                      | Removes ghost entries + 90-day rotation. Supports `--if-stale` to run weekly only (checks `_db/.last-audit`)                                                                                                                                                                                                                                                                                                                                |
 | `_check_ingest_log_impl.py` | Called by `check-ingest-log.sh`                   | Python helper for the ingest-log audit: deduplicates entries by `source-file` (prefers `created` over `skipped`) and removes ghost `created` entries whose `output-file` no longer exists                                                                                                                                                                                                                                                   |
 | `build-thread-index.py`     | Called by `/w-daily` Phase 0                      | Supports `--incremental` (only scan notes newer than index mtime) and `--rebuild` (full scan). Index is append-only                                                                                                                                                                                                                                                                                                                         |
-| `update-thread-index.py`    | Called by `/w-daily` Step 3.1b                    | Appends new email note entries to `_db/thread-index.json` after note creation. Reads frontmatter, extracts conversation-id/subject, normalizes, deduplicates by path. Usage: `--notes path1.md path2.md` or `--stdin`                                                                                                                                                                                                                       |
 | `build-email-lookup.py`     | Called by `/w-daily` Phase 0                      | Extracts email→wikilink+VIP mapping from entity-registry.json. Self-skips if registry unchanged since last build                                                                                                                                                                                                                                                                                                                            |
 | `check-plaud-completeness.py` | Called by `/w-daily` Phase 0.6                  | Compares Plaud API recordings for the target date against local files (`00-Inbox/` + `_attachments/`). Prints a warning listing missing recordings so the sync cursor can be lowered and re-pulled. Soft check, always exits 0, never blocks the run                                                                                                                                                                                          |
 | `pull-plaud.py`             | Called by `/w-daily` Phase 0 (optional)           | Pulls new Plaud NotePin recordings via `plaud_api`, converts them to the structured transcript format in `00-Inbox/`. Incremental via `_db/plaud-sync.json`; exits 0 if no Plaud auth is configured. Resolves speakers via `_db/plaud-speaker-map.json` then `_db/email-lookup.json`                                                                                                                                    |
@@ -294,7 +295,9 @@ Located in `_scripts/`.
 | `process-capture.py`        | Called by `/w-daily`                              | Routes the daily note's `## Capture` section: `- [ ]` lines become tracked tasks in `07-Areas/My-Tasks.md`, plain lines move to `## Notes`                                                                                                                                                                                                                                                                                    |
 | `build-person-index.py`     | Called by `/w-1on1` Phase 0                       | Scans `05-Interactions/**/*.md` frontmatter, builds `_db/person-index.json`: person→interactions map with summaries                                                                                                                                                                                                                                                                                                                        |
 | `build-open-actions.py`     | Called by `/w-1on1`, `/w-review`; parser reused by `build-daily-briefings.py` | Extracts open items (`[ ]`, `[/]`, `[>]`, `[!]`) and completed (`[x]`, `[-]`) from interactions + projects + `07-Areas/06-Organization/` into `_db/open-actions.json`. Open items include `status` field (todo/in-progress/delegated/urgent). Indexed by owner/mentioned; completed as flat list. Excludes `[demoted::]` lines |
-| `build-daily-briefings.py`  | Called by `/w-daily` Phase 5                      | Deterministically renders the generated block in daily notes. Meetings/emails/reference docs come from `briefing_data[]`; action items are re-read from final note bodies with the open-actions parser. Key emails and reference docs cap at 5, decisions cap at 7, actions cap at 5 per group, overflow is surfaced. Flags lite-mode deferred transcripts `(deferred, not yet synthesized)` from a `briefing_data.deferred` flag. |
+| `briefe.py`                 | Called by `/w-daily` Step 5                       | Rebuilds daily briefings from notes on disk (v2 single source of truth). For every touched date it ALWAYS rebuilds from ALL of that date's interaction/reference notes, regenerating the deterministic sections (meetings, emails, decisions, actions, ingestion count) via the `build-daily-briefings.py` render library, while PRESERVING the LLM-authored `## Attention needed` bullets and italic sign-off (from the existing note, or an `--overrides` file when provided). Rebuilding from disk means a rerun can never clobber a past day |
+| `build-daily-briefings.py`  | Render library imported by `briefe.py`            | Deterministic daily-note render library (no longer a CLI): `build_briefing`, `merge_briefing_into_existing`, `build_new_daily_note`, imported by `briefe.py` and `rebuild-daily-from-notes.py`. Renders the generated block: meetings/emails/reference docs, decisions, and action items re-read from final note bodies with the open-actions parser. Key emails and reference docs cap at 5, decisions cap at 7, actions cap at 5 per group, overflow is surfaced. The `--inputs` envelope CLI path is pre-v2 and nothing produces its input files anymore |
+| `finish.py`                 | Called by `/w-daily` Step 6                       | Git phase. Stale-lock age guard, allowlist-stages only the content trees `/w-daily` writes, commits only when something is staged, pushes only when there are unpushed commits. Push failure is categorized (`busy-deferred`, `publickey`, etc.), never fatal: data is safe on local disk and the next run retries. Always exits 0 |
 | `rebuild-daily-from-notes.py` | Manual migration/helper                         | Rebuilds regular daily-note generated sections from final `05-Interactions/YYYY/` and `08-Reference/` notes. Preserves everything from `## Today's focus` onward. Used for historical compaction/backfill; weekly reviews are intentionally left untouched. |
 | `audit-link-casing.py`      | On-demand (`--fix`)                               | Reports people-link wikilinks whose casing differs from the actual `04-People/` filename (filesystem = canonical truth); `--fix` normalizes them. Catches drift that resolves on case-insensitive Obsidian but breaks WSL scripts/indexes                                                                                                                                                                                                                                                                        |
 | `prep-1on1-data.py`         | Called by `/w-1on1` Phase 0                       | Reads person-index + open-actions, extracts one person's data into compact JSON (~4KB) for agent context                                                                                                                                                                                                                                                                                                                                    |
@@ -328,8 +331,8 @@ calendar, dataview, obsidian-tasks-plugin, omnisearch, quickadd, templater-obsid
 
 The pipeline ingests meeting transcripts from any source that drops a file into `00-Inbox/`. A transcript is first-class when it has:
 
-1. **A structured header** (`MeetingSubject:`, `MeetingDate:`, `Attendees:`, `MeetingType:`, `RecordingDuration:` in the first few lines): `classify-inbox.py` reads this directly and routes to `transcript-processor` with pre-populated metadata, no re-detection needed.
-2. **Timestamped speaker lines** (e.g. `[0:05:23] Sam: ...`): the transcript-processor resolves speakers per `speaker-resolution.md`.
+1. **A structured header** (`MeetingSubject:`, `MeetingDate:`, `Attendees:`, `MeetingType:`, `RecordingDuration:` in the first few lines): `classify-inbox.py` reads this directly and routes it to a note-writing agent (`prompts/transcript-note.md`) with pre-populated metadata, no re-detection needed.
+2. **Timestamped speaker lines** (e.g. `[0:05:23] Sam: ...`): the `transcript-note.md` template resolves speakers per `speaker-resolution.md`.
 
 Bring your own recorder or transcription tool to produce that format. Generic transcripts (timestamps + speaker labels, no structured header) are also detected and processed. Plaud NotePin is supported out of the box (see below).
 
@@ -364,21 +367,21 @@ CalendarOrganizer: ...       # Calendar organizer email (if matched)
 
 ## Key Design Patterns
 
-1. **Script-first preprocessing**: All deterministic work runs as Python/bash scripts: classification, header parsing, body cleaning, entity resolution, frontmatter generation, threading, batching, duplicate detection. LLM does content comprehension only. See `classify-inbox.py`, `write-notes.py`, `check-ingest-log.sh`
+1. **Script-first preprocessing**: All deterministic work runs as Python/bash scripts: classification, header parsing, body cleaning, entity resolution, frontmatter generation, threading, batching, duplicate detection. LLM does content comprehension only. See `prepare.py`, `classify-inbox.py`, `finalize.py`
 2. **Orchestration-only master**: `/w-daily` main context never reads email bodies or entity registry. It reads the compact manifest summary (~2KB), dispatches agents, and composes briefings from structured returns
 3. **Manifest split**: `classify-inbox.py` writes full manifest to `_db/manifest.json` (all data for agents) and compact summary to stdout (counts, lists, batch plans for master). Eliminates large manifests in main context
-4. **Structured agent returns**: Email-processor and transcript-processor return structured JSON (`notes[]`, `log_entries[]`, `briefing_data[]`, `new_entities[]`) instead of writing files. `write-notes.py` handles all I/O. Doc-processor still writes files directly
+4. **Staged-markdown agent returns**: Note-writing agents (transcript/email/doc) Write finished markdown notes (YAML frontmatter + body) into `_db/staged-notes/<output_filename>` and return a one-line `NOTE:` or `SKIP:`. No JSON envelopes: `finalize.py` picks the staged notes up, validates, applies hygiene, and moves them into place. The agent's frontmatter is authoritative and kept verbatim except a surgical summary patch
 5. **Body bundling**: `classify-inbox.py` reads cleaned email bodies back after `--clean-bodies` pass, stores as `cleaned_body` on each manifest entry. Agents read bodies from manifest, not individual files
-6. **Briefing-ready returns**: Processor agents return per-note `briefing_data` with summaries, VIP flags, actions, decisions. Daily composition uses summaries/decisions from `briefing_data`, but actions are re-read from final written note bodies so task hygiene is authoritative.
+6. **Briefings rebuilt from disk**: `briefe.py` composes each day's briefing from ALL of that date's final notes on disk (meetings, emails, decisions, and actions via the open-actions parser), not from an ephemeral per-run snapshot. Only the LLM-authored `## Attention needed` and sign-off are carried across (via `--overrides`), so a rerun never loses bespoke content or clobbers a past day.
 7. **Thread consolidation**: Emails in same thread → fewer, consolidated notes (HIGH gets full note + MEDIUM/LOW as bullets; MEDIUM-only thread → one note)
 8. **Date-scoped briefings**: Backlog ingestion creates separate daily notes per email date, not processing date
 9. **Stub creation threshold**: Direct interaction (≤5 recipients) → stub file. Mass CC (>5) → registry only
 10. **Staging directory**: `00-Inbox/_processing/` during ingestion enables crash recovery
 11. **VIP flagging**: People in entity registry can have a `"vip"` tier (boss-chain/stakeholder/team). Affects relevance scoring, adds `vip-involved:` frontmatter + `vip/` tags, and shows markers (`**!**`/`*`) in daily briefings. See `.claude/rules/vip.md`
-12. **Inline processing (decoupled)**: Phase 1.5a processes ≤6 emails inline regardless of whether transcripts/docs exist. Phase 1.5b processes ≤3 docs inline via markitdown. Transcript-processor always runs as an agent. Typical morning: only transcript agent spawns
+12. **Inline vs agent dispatch**: In Step 2 the master applies the note templates inline for small batches (≤10 emails with no thread wider than 3, ≤3 docs); larger email backlogs and every transcript go to `general-purpose` note-writing agents. Typical morning: only transcript agents spawn
 13. **Thread index**: `_db/thread-index.json` provides O(1) cross-batch thread lookup by ConversationId or normalized subject, replacing O(n) grep across interaction files
 14. **Daily notes as scan layer**: Regular daily notes are generated blocks plus user-owned `## Today's focus` / `## Notes`. Generated sections are compact: emails/reference docs cap at 5, decisions cap at 7, actions cap at 5 Sam-owned + 5 waiting-on-others, with overflow pointers to source notes.
-15. **Lite mode + deferred transcripts**: `/w-daily lite` processes emails/docs fully but defers transcripts (the wall-clock sink) to thin `status: deferred` stub notes, chosen interactively per run; the raw transcript moves to `_attachments/`. The same synthesize/defer choice is offered on a normal full run at/above `ETA_DEFER_OFFER_MIN_TRANSCRIPTS` transcripts (default 3), so a transcript-heavy morning pauses once instead of silently committing to a long synthesis. `/w-daily --upgrade-deferred` later synthesizes each stub in place (`write-notes.py` `overwrite`), then rebuilds affected daily briefings. A script-computed ETA (`classify-inbox.py`) warns up front, but only when a run will be slow (>~2 min). See `.claude/skills/w-daily/SKILL.md` Phases 1.7, 2.0, U.
+15. **Staged notes + crash safety**: Note-writing agents Write into `_db/staged-notes/`; `finalize.py` is the only mover into the vault. If `finalize.py` crashes (or a run dies between dispatch and finalize), the staged notes survive and Step 1's leftover check surfaces them on the next run, while the sources stay in `_processing/` for regeneration. A script-computed ETA (`classify-inbox.py`) prints a one-line heads-up when a run will be slow (transcript-heavy), without pausing. See `.claude/skills/w-daily/SKILL.md`.
 
 ---
 
@@ -401,7 +404,7 @@ CalendarOrganizer: ...       # Calendar organizer email (if matched)
 
 | Context                                                       | Model                 | Rationale                                |
 | ------------------------------------------------------------- | --------------------- | ---------------------------------------- |
-| Processor agents (email, doc, transcript)                     | Sonnet 4.6            | High volume, rule-driven, cost efficient |
+| Note-writing agents (transcript, email, doc)                  | Sonnet 4.6 (Haiku for low-stakes transcripts) | High volume, rule-driven, cost efficient |
 | Synthesis agents (review, 1on1-prep)            | Opus 4.6 (explicit)   | Complex analysis, writing quality        |
 | w-project-status, w-prep                                      | Opus 4.6 (explicit)   | Judgment-heavy, user-facing synthesis    |
 | Master commands (w-setup, w-daily, w-review, w-1on1, w-task-audit) | Current session model | Orchestration only                       |

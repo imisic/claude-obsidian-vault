@@ -6,7 +6,7 @@ These rules define HOW ingestion works. The `/w-daily` command orchestrates WHEN
 - Email preprocessing (cleaning, relevance scoring, threading): `.claude/rules/email-preprocessing.md`
 
 ### Conversion tools
-Each format has a zero-install fallback where possible (see `doc-processor` for the per-file logic):
+Each format has a zero-install fallback where possible (see `prompts/doc-note.md` for the per-file logic):
 - **PDF**: `markitdown` if installed, else read it directly with the Read tool (PDFs are readable natively)
 - **DOCX/PPTX/XLSX**: `markitdown` required (binary Office formats); if absent, skip and report
 - **HTML**: `defuddle` if installed, else read the file directly and extract the main content
@@ -38,7 +38,7 @@ Determine type BEFORE routing. Check in this order:
   - `[H:MM:SS] Unknown:` (no diarization match)
 - Metadata (subject, date, attendees, meeting-type) is pre-populated in header. Use directly
 - Companion `.json` and `.md` files share the same stem (e.g. `<stem>.txt` + `<stem>.json` + `<stem>.md`). The `.json` is the canonical source: `classify-inbox.py` reads it for richer metadata (float-precision screenshot timestamps, speaker→profile map, quality flags) when present and prefers its values over the `.txt` header. The `.md` is a pre-built preview, unused by the pipeline.
-- Screenshots live in `00-Inbox/_screenshots/` with filename pattern `<sessionId>-screenshot-NN.png`. The `.json`'s `annotations.screenshots[]` array lists each with float-second `timestamp` and basename `path`. The transcript-processor embeds them inline under the matching Discussion bullet with a 1-line caption.
+- Screenshots live in `00-Inbox/_screenshots/` with filename pattern `<sessionId>-screenshot-NN.png`. The `.json`'s `annotations.screenshots[]` array lists each with float-second `timestamp` and basename `path`. The transcript-note.md template embeds them inline under the matching Discussion bullet with a 1-line caption.
 
 **Generic transcript** (route to 05-Interactions/YYYY/ as meeting):
 - Has timestamps like `[00:15:23]` or `(00:15)`
@@ -167,7 +167,7 @@ The prep note has two zones:
 **Scenario A: Transcript exists for the same meeting**
 Match by: same `date:` AND (same `person:` for 1on1s, OR same `meeting-type` + overlapping attendees for other meetings).
 
-1. Let the transcript-processor create the primary meeting note as usual
+1. Let the note-writing agent (`prompts/transcript-note.md`) create the primary meeting note as usual
 2. Check if the prep note's Meeting zone has content (Discussion/Actions/Next time, beyond the empty template placeholders `-` and `- [ ]`)
 3. If Meeting zone has content:
    - Clean and condense the user's notes (same rules as manual meeting processing)
@@ -221,7 +221,7 @@ recording-duration: "HH:MM:SS" # from RecordingDuration header
 source-file: original-filename.txt
 ```
 
-Note: Structured transcript headers (`MeetingSubject`, `MeetingDate`, `Attendees`, `MeetingType`) provide pre-classified metadata. The transcript-processor should use these directly instead of re-detecting from content.
+Note: Structured transcript headers (`MeetingSubject`, `MeetingDate`, `Attendees`, `MeetingType`) provide pre-classified metadata. The transcript-note.md template should use these directly instead of re-detecting from content.
 
 ### Originals policy
 | Content type | After processing | Rationale |
@@ -232,7 +232,7 @@ Note: Structured transcript headers (`MeetingSubject`, `MeetingDate`, `Attendees
 | Emails (.txt from inbox) | **Delete from 00-Inbox/** | Content captured in interaction note. OneDrive originals in `Processed/` subfolder |
 | Structured transcripts (.txt) | **Move to _attachments/** | Verbatim transcript has value beyond structured note |
 | Transcript companions (.json, .md) | **Move to _attachments/** alongside the .txt | Same stem; the .json carries the canonical metadata/segments/quality data, the .md is a generated preview |
-| Transcript screenshots (.png) | **Move to `_attachments/screenshots/<transcript-stem>/`** | Embedded inline in the meeting note via wikilinks; rewritten by write-notes.py to the final path |
+| Transcript screenshots (.png) | **Move to `_attachments/screenshots/<transcript-stem>/`** | Embedded inline in the meeting note via wikilinks; rewritten by finalize.py to the final path |
 | Generic transcripts | **Move to _attachments/** | Verbatim transcript has value beyond structured note |
 | Calendar JSON (.json) | **Leave in 00-Inbox/** | Overwritten by next Pull-Emails.ps1 run; consumed by the recorder app |
 
@@ -270,8 +270,8 @@ On startup, the master command (`/w-daily`) runs a log integrity check: remove a
 ### Action item extraction
 - Look for patterns: "TODO", "action:", "follow up", "will do", "@name will", "please [verb]"
 - Format emitted by agents: `- [ ] [[Owner-Name]] description [due:: YYYY-MM-DD] [source:: [[note-name]]]`
-- `[created:: YYYY-MM-DD]` is stamped by `write-notes.py` at write time. Agents do NOT emit it.
-- `write-notes.py` applies the task hygiene matrix automatically (VIP-aware, size-based).
+- `[created:: YYYY-MM-DD]` is stamped by `finalize.py` at write time. Agents do NOT emit it.
+- `finalize.py` applies the task hygiene matrix automatically (VIP-aware, size-based).
 - Place in `## Actions` section at the bottom of the note
 
 ### Registry maintenance

@@ -48,7 +48,7 @@ After cleaning, replace PII in email body text with tokens before AI agents see 
 - **Headers (From/To/CC) are NOT sanitized**, needed for entity resolution
 - Token mappings stored in `_db/sanitize-mappings.json` (bidirectional: PII-to-token and token-to-PII)
 - New PII auto-generates a new token; known PII reuses existing tokens
-- Transcripts are not sanitized (emails only)
+- Transcript headers are left verbatim (attendee emails there feed entity resolution). The spoken body gets the same email/phone tokenization, but only in a separate working copy under `_db/agent-inputs/` (manifest field `agent_file`) that note-writing agents read: the original transcript file is never modified, and moves to `_attachments/` untouched
 
 ### Step 2: Detect duplicates
 

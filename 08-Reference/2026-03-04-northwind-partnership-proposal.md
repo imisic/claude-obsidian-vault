@@ -9,7 +9,7 @@ tags: []
 
 # Northwind Partnership Proposal
 
-> [!example] Example reference note (output of the doc-processor / `/w-daily`, converted from a PDF into markdown in `08-Reference/`). Reference notes do NOT get `status: unprocessed`. Fictional demo data. Replace or delete. See README → "Example content".
+> [!example] Example reference note (output of `/w-daily`, converted from a PDF into markdown in `08-Reference/`). Reference notes do NOT get `status: unprocessed`. Fictional demo data. Replace or delete. See README → "Example content".
 
 *Source: ingested 2026-03-04*
 
