@@ -68,7 +68,7 @@ Run `/w-setup` to fill these in (and the rest) automatically. To do it by hand, 
 - People stubs are auto-created from emails; projects are NEVER auto-created (flag-only).
 - Owner identity (slug, name, company, emails, timezone) is configured in one place: the `OWNER CONFIG` block in `_scripts/utils.py`. Every script imports from there.
 - The product-management layer (products, markets, segments, OKRs, steerco) is an optional preset, toggled in `/w-setup`.
-- Processor skills (email, doc, transcript) run on Sonnet for efficiency; synthesis skills (review, 1on1-prep, project-status) run on Opus for quality.
+- Note-writing agents (transcript, email, doc) run on Sonnet, or Haiku for low-stakes transcripts; synthesis skills (review, 1on1-prep, project-status) run on Opus for quality.
 - Email threads are consolidated: same-thread emails merge into fewer notes.
 
 ## Batch processing

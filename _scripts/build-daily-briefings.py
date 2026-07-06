@@ -2,8 +2,8 @@
 """
 build-daily-briefings.py: Deterministic daily note builder.
 
-Consumes aggregated briefing_data[] from email-processor and transcript-processor
-outputs and writes or updates daily notes under 01-Daily/YYYY/.
+Builds and updates daily notes under 01-Daily/YYYY/ from parsed note data (the
+legacy --inputs CLI consumed aggregated briefing_data[] envelopes, now retired).
 
 This replaces the per-day hand-authored markdown that /w-daily used to do in the
 main LLM context. Structure, ordering, wikilinks, and VIP markers are applied
@@ -371,8 +371,8 @@ def build_briefing(entries: list[dict], overrides: dict | None = None,
     """Build the full briefing block (between H1 and `## Today's focus`).
 
     Emails are distinguished from meetings via the note_path filename pattern
-    `YYYY-MM-DD-email-*.md`. Transcript-processor also sets `meeting_type`, but
-    the filename check is authoritative and works even if agents drop the field.
+    `YYYY-MM-DD-email-*.md`. Note-writing agents also set `meeting_type`, but
+    the filename check is authoritative and works even if an agent drops the field.
     """
     emails = []
     meetings = []

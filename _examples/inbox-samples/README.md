@@ -1,6 +1,6 @@
 # Inbox samples (example raw inputs)
 
-> [!example] Everything in this folder is fictional demo data (persona Sam Rivera @ Acme Corp). These are **raw inputs**, the kind of file you drop into `00-Inbox/`, shown so you can see what the scripts and processors consume *before* they become notes. They live here, not in `00-Inbox/`, so a fresh clone's first `/w-daily` stays a clean no-op.
+> [!example] Everything in this folder is fictional demo data (persona Sam Rivera @ Acme Corp). These are **raw inputs**, the kind of file you drop into `00-Inbox/`, shown so you can see what the scripts and note-writing agents consume *before* they become notes. They live here, not in `00-Inbox/`, so a fresh clone's first `/w-daily` stays a clean no-op.
 
 The rest of the vault already ships with the **outputs** these inputs would produce (daily notes, interaction notes, reference notes, reviews, all marked with an `[!example]` callout). This folder shows the other half: the inputs.
 
