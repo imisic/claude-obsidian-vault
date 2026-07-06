@@ -390,6 +390,34 @@ def load_vip_slugs(vault: Path) -> set:
     return slugs
 
 
+def load_vip_tiers(vault: Path) -> dict:
+    """Return {wikilink-slug: vip-tier} for every person carrying a `vip` field
+    in the registry (ALL tiers, including team, unlike load_vip_slugs which
+    filters to the protecting tiers). Used by finalize to stamp vip-involved/tags
+    onto notes whose attendees did not resolve upstream (e.g. a recorder import
+    with a placeholder attendee). Empty dict if the registry is missing/unreadable.
+    """
+    registry_path = vault / "_db" / "entity-registry.json"
+    if not registry_path.exists():
+        return {}
+    try:
+        with open(registry_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return {}
+    tiers = {}
+    for person in data.get("people", []):
+        tier = person.get("vip")
+        if not tier:
+            continue
+        name = person.get("name", "")
+        if name:
+            tiers[name.replace(" ", "-")] = tier
+        for alias in person.get("aliases", []) or []:
+            tiers[alias.replace(" ", "-")] = tier
+    return tiers
+
+
 def parse_task_line(line: str) -> dict:
     """Parse a single line as a possible task.
 
