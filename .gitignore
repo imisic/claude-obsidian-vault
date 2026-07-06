@@ -64,6 +64,11 @@ _db/maintenance-todo.md
 _db/backups/*
 !_db/backups/.gitkeep
 
+# v2 pipeline staging (transient; hold real note bodies and PII-sanitized
+# transcript working copies mid-run. finalize.py and Step 7 clean them up).
+_db/staged-notes/
+_db/agent-inputs/
+
 # Ingested/generated content (real meeting transcripts, emails, screenshots).
 # This template ships empty; never commit real captured content.
 00-Inbox/*
