@@ -15,10 +15,11 @@ Usage:
                                      [--target-date YYYY-MM-DD]
                                      [--overrides FILE]
 
-Inputs may be either:
-  - structured outputs from write-notes.py's inputs (with "briefing_data" key)
-  - direct briefing_data arrays
-  - the agent pointer JSONs (if they embed briefing_data)
+DEPRECATED as a CLI (v2): briefe.py is the daily-briefing builder and rebuilds
+from notes on disk. This module survives as the render library (build_briefing,
+merge_briefing_into_existing, build_new_daily_note) imported by briefe.py and
+rebuild-daily-from-notes.py. The --inputs envelope path below is the pre-v2 flow
+and nothing produces its input files anymore.
 
 Overrides file (JSON):
 {
@@ -49,10 +50,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from utils import ensure_utf8_stdio, atomic_text_write, OWNER_SLUG
 
 # Reuse the open-actions indexer's parser so the daily note renders actions from
-# the FINAL written note body (post-hygiene), not from the pre-hygiene
-# briefing_data.actions copy. write-notes.py applies task hygiene/demotion to the
-# note body only (briefing_data.actions keeps the unfiltered copy) so a task
-# demoted to a plain bullet would otherwise still show as an action in the daily.
+# the FINAL written note body (post-hygiene, as stamped by finalize.py).
 # scan_file_with_demoted() already excludes demoted + completed lines.
 import importlib.util as _ilu
 _boa_spec = _ilu.spec_from_file_location(
@@ -181,11 +179,7 @@ def render_meetings(meetings: list[dict]) -> list[str]:
         stem = _note_stem(m.get("note_path", ""))
         quality = m.get("recording_quality")
         quality_note = f" _(recording {quality})_" if quality else ""
-        # Lite-mode deferred transcripts: the meeting note is a thin stub, raw
-        # transcript parked in _attachments/. Flag it so the briefing is honest
-        # about what was (not) captured. Run /w-daily --upgrade-deferred later.
-        deferred_note = " _(deferred, not yet synthesized)_" if m.get("deferred") else ""
-        lines.append(f"- {summary} → [[{stem}|note]]{quality_note}{deferred_note}")
+        lines.append(f"- {summary} → [[{stem}|note]]{quality_note}")
     lines.append("")
     return lines
 
