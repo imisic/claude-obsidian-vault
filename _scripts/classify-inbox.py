@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from utils import (REPLY_PREFIXES, normalize_subject, subject_to_slug,
                    guess_wikilink_from_email, company_from_domain,
                    generate_pii_token, ensure_utf8_stdio, atomic_json_write,
-                   apply_vip_boost, recipient_set,
+                   atomic_text_write, apply_vip_boost, recipient_set,
                    OWNER_SLUG, OWNER_PERSONAL_EMAILS, LOCAL_TZ)
 
 
@@ -162,6 +162,41 @@ def sanitize_body_pii(body: str, mappings: dict) -> str:
     body = EMAIL_PII_RE.sub(replace_email, body)
     body = PHONE_PII_RE.sub(replace_phone, body)
     return body
+
+
+def sanitize_transcript_agent_copy(src: Path, dest: Path, mappings: dict) -> bool:
+    """Write a PII-sanitized working copy of a transcript for the note-writing agent.
+
+    Same posture as emails: the header block (up to the first blank line) stays
+    verbatim because attendee emails there feed entity resolution, the spoken
+    body gets email/phone tokens. The ORIGINAL stays untouched in _processing/
+    and moves verbatim to _attachments/ at finalize time (originals policy).
+    Returns True on success.
+    """
+    try:
+        with open(src, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+    except Exception:
+        return False
+
+    # Header block ends at the first blank line; cap the search so a file with
+    # no blank line is treated as all-body rather than all-header.
+    body_start = 0
+    for i, line in enumerate(lines[:30]):
+        if not line.strip():
+            body_start = i + 1
+            break
+
+    out = lines[:body_start]
+    for line in lines[body_start:]:
+        out.append(sanitize_body_pii(line, mappings))
+
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        atomic_text_write(dest, "".join(out))
+        return True
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -1248,31 +1283,52 @@ def generate_transcript_filename(transcript_meta: dict, frontmatter: dict) -> st
     return f"{date}-{meeting_type}-{slug}.md"
 
 
+def resolve_output_collision(filename: str, date: str, vault: Path, assigned: set,
+                             target: str | None = None) -> str:
+    """Pre-resolve output-filename collisions at classify time.
+
+    v2 pipeline: note-writing agents stage notes under the final name and
+    finalize.py moves them verbatim, so the name must be collision-free BEFORE
+    dispatch (a post-hoc rename would desync the manifest, the staged note, and
+    the ingest-log). Checks three surfaces: names already assigned in this
+    batch, the target dir (05-Interactions/<year>/ by default, 08-Reference for
+    docs), and any leftover staged note from a crashed run.
+    """
+    year = (date or "")[:4] or "0000"
+    target_dir = vault / (target or f"05-Interactions/{year}")
+    staged_dir = vault / "_db" / "staged-notes"
+    stem = filename[:-3] if filename.endswith(".md") else filename
+    candidate = filename
+    n = 2
+    while (candidate in assigned
+           or (target_dir / candidate).exists()
+           or (staged_dir / candidate).exists()):
+        candidate = f"{stem}-{n}.md"
+        n += 1
+    assigned.add(candidate)
+    return candidate
+
+
 # ---------------------------------------------------------------------------
-# Run-time estimate (ETA) for the /w-daily heads-up and lite mode
+# Run-time estimate (ETA) for the /w-daily heads-up line
 # ---------------------------------------------------------------------------
 
-# Per-item wall-clock estimates in minutes. Rough, tuned against the timing
-# notes in w-daily/SKILL.md (inline email ~30s, email agent batch ~6min,
-# transcript synthesis ~6min, long ~12min, low-stakes ~5min). Centralized here
-# so they can be adjusted against observed reality without touching logic.
-ETA_EMAIL_INLINE = 0.5          # whole inline email batch (<=6 high/med, simple threads)
-ETA_EMAIL_AGENT_BATCH = 6.0     # one email-processor agent batch
+# Per-item wall-clock estimates in minutes. Rough, tuned against the v2
+# pipeline (one-shot note-writing agents, no fork/envelope overhead: transcript
+# ~3-4 min, inline email batch ~30s). Centralized here so they can be adjusted
+# against observed reality without touching logic.
+ETA_EMAIL_INLINE = 0.5          # whole inline email batch (<=10 high/med, simple threads)
+ETA_EMAIL_AGENT_BATCH = 3.0     # one backlog email agent batch (writes notes directly)
 ETA_DOC = 0.3                   # per document
-ETA_TRANSCRIPT_SUBSTANTIVE = 6.0
-ETA_TRANSCRIPT_LONG = 12.0      # substantive + recording longer than ETA_LONG_RECORDING_SEC
-ETA_TRANSCRIPT_LOW = 5.0        # low-stakes (lecture/training/webinar/demo)
+ETA_TRANSCRIPT_SUBSTANTIVE = 3.5
+ETA_TRANSCRIPT_LONG = 4.5       # substantive + recording longer than ETA_LONG_RECORDING_SEC
+                                # (longer input, same one-shot synthesis)
+ETA_TRANSCRIPT_LOW = 2.5        # low-stakes (lecture/training/webinar/demo), runs on Haiku
 ETA_LONG_RECORDING_SEC = 30 * 60
-ETA_CONTENTION_FACTOR = 0.5     # >2 transcripts run in parallel but share one
-                                # Sonnet throughput pool, so wall-clock grows
-                                # with the rest, not just the slowest
+ETA_CONTENTION_FACTOR = 0.5     # parallel transcripts share one model throughput
+                                # pool, so wall-clock grows with the rest, not
+                                # just the slowest
 ETA_SLOW_THRESHOLD_MIN = 2.0    # below this, /w-daily prints no heads-up line
-ETA_DEFER_OFFER_MIN_TRANSCRIPTS = 3  # at/above this transcript count, a normal
-                                     # (non-lite) run also pauses once for the
-                                     # synthesize/defer choice. Distinct from
-                                     # ETA_SLOW_THRESHOLD_MIN (the slow heads-up,
-                                     # which trips on a single transcript and is
-                                     # too sensitive to gate deferral on).
 
 LOW_STAKES_SUBJECT_PREFIXES = (
     "lecture", "training", "webinar", "tutorial", "onboarding", "demo",
@@ -1317,12 +1373,12 @@ def _duration_to_seconds(duration: str) -> int:
 def classify_transcript_stakes(transcript_meta: dict) -> str:
     """Classify a transcript as 'low-stakes' or 'substantive'.
 
-    Low-stakes = a passive knowledge-transfer recording the owner can safely
-    defer: the (normalized) subject begins with a learning marker, OR its last
-    word is a demo/walkthrough noun, AND it is not a 1on1 or steerco. Mirrors
-    the Model-triage signal documented in w-daily/SKILL.md. 'Passive attendee'
-    can't be known before synthesis, so meeting-type (1on1/steerco are never
-    low-stakes) stands in as a deterministic proxy.
+    Low-stakes = a passive knowledge-transfer recording that can run on Haiku
+    instead of Sonnet: the (normalized) subject begins with a learning marker,
+    OR its last word is a demo/walkthrough noun, AND it is not a 1on1 or
+    steerco. Mirrors the model-triage signal documented in w-daily/SKILL.md.
+    'Passive attendee' can't be known before synthesis, so meeting-type
+    (1on1/steerco are never low-stakes) stands in as a deterministic proxy.
 
     Conservative by design: marker matching is anchored to the prefix or the
     trailing noun, never mid-subject, so a real meeting whose title merely
@@ -1350,22 +1406,22 @@ def estimate_transcript_minutes(transcript_meta: dict, stakes: str) -> float:
 
 
 def estimate_eta(result: dict, counts: dict) -> dict:
-    """Rough wall-clock estimate for a full run and a lite run.
+    """Rough wall-clock estimate for the /w-daily heads-up line.
 
-    full = emails + docs + transcripts(synthesized).
-    lite = emails + docs only (all transcripts deferred to thin stubs, ~free).
-    Transcripts dominate: <=2 run in one sequential agent (sum); >2 run in
-    parallel but contend on one Sonnet pool (slowest + a fraction of the rest).
-    Also stamps each transcript with its 'stakes' class and 'est_minutes'.
+    full = emails + docs + transcripts. Transcripts dominate: each gets its own
+    one-shot note-writing agent, all dispatched in one block, so wall-clock is
+    the slowest plus a contention fraction of the rest (shared model pool).
+    Also stamps each transcript with its 'stakes' class and 'est_minutes'
+    (stakes drives the Haiku triage for low-stakes recordings).
     """
     breakdown = []
 
-    # Emails: inline when <=6 high/med and no thread wider than 3, else agents.
+    # Emails: inline when <=10 high/med and no thread wider than 3, else agents.
     n_high_med = len(result.get("email_manifest", []))
     email_min = 0.0
     if n_high_med:
         max_thread = max((len(t.get("emails", [])) for t in result.get("threads", [])), default=0)
-        if n_high_med <= 6 and max_thread <= 3:
+        if n_high_med <= 10 and max_thread <= 3:
             email_min = ETA_EMAIL_INLINE
         else:
             n_batches = max(1, len(result.get("batches", [])))
@@ -1394,26 +1450,21 @@ def estimate_eta(result: dict, counts: dict) -> dict:
             "est_minutes": est,
         })
 
+    # One agent per transcript, all dispatched in one block: wall-clock is the
+    # slowest plus a contention share of the rest.
     n_t = len(t_estimates)
     if n_t == 0:
         transcript_min = 0.0
-    elif n_t <= 2:
-        transcript_min = sum(t_estimates)  # one agent, sequential
     else:
         ordered = sorted(t_estimates, reverse=True)
         transcript_min = ordered[0] + ETA_CONTENTION_FACTOR * sum(ordered[1:])
 
     full_min = email_min + doc_min + transcript_min
-    lite_min = email_min + doc_min  # transcripts deferred, negligible script cost
 
     return {
         "full_minutes": int(round(full_min)),
-        "lite_minutes": int(round(lite_min)),
         "slow": full_min > ETA_SLOW_THRESHOLD_MIN,
         "transcript_count": n_t,
-        # A normal run also pauses for the synthesize/defer choice at/above the
-        # threshold. Kept independent of `slow` (which trips on a single slow item).
-        "defer_offer": n_t >= ETA_DEFER_OFFER_MIN_TRANSCRIPTS,
         "breakdown": breakdown,
     }
 
@@ -1568,7 +1619,7 @@ def main():
                     result["emails"].append(str(filepath))
             else:
                 # Failed to parse headers, treat as document
-                result["docs"].append(str(filepath))
+                result["docs"].append({"file": str(filepath), "filename": filepath.name})
                 print(f"Warning: Failed to parse email headers for {filepath}", file=sys.stderr)
         elif file_type == "transcript_mr":
             result["transcripts"].append({
@@ -1582,7 +1633,7 @@ def main():
                 "type": "generic-transcript",
             })
         elif file_type == "document":
-            result["docs"].append(str(filepath))
+            result["docs"].append({"file": str(filepath), "filename": filepath.name})
 
     # Filter recovered transcripts: skip if primary exists and recovered has zero duration
     if result["transcripts"]:
@@ -1881,6 +1932,26 @@ def main():
                       file=sys.stderr)
                 email["cleaned_body"] = ""
 
+        # Transcript PII: same posture as email bodies. Agents never read the
+        # raw transcript; they get a sanitized working copy under
+        # _db/agent-inputs/ (manifest field agent_file). The original stays in
+        # _processing/ and moves verbatim to _attachments/ at finalize time.
+        if pii_mappings is not None and result.get("transcripts"):
+            agent_inputs = vault / "_db" / "agent-inputs"
+            if agent_inputs.exists():
+                # Leftovers from a crashed run are stale: sources still sit in
+                # _processing/ and get re-sanitized fresh right below.
+                for old in agent_inputs.glob("*"):
+                    old.unlink(missing_ok=True)
+            for transcript in result["transcripts"]:
+                src = Path(transcript["file"])
+                dest = agent_inputs / src.name
+                if sanitize_transcript_agent_copy(src, dest, pii_mappings):
+                    transcript["agent_file"] = str(dest.relative_to(vault))
+                else:
+                    print(f"Warning: could not sanitize {src.name}, agent will "
+                          f"read the original", file=sys.stderr)
+
         # Save updated sanitize mappings if new PII was discovered
         if pii_mappings is not None:
             pii_count_after = len(pii_mappings["emails"]) + len(pii_mappings["phones"])
@@ -1904,6 +1975,7 @@ def main():
         # Resolve emails and check duplicates
         kept_emails = []
         kept_manifest = []
+        assigned_names = set()  # collision pre-resolution across this whole batch
         for email in result["email_manifest"]:
             # Entity resolution first: the content-dedup branch of
             # check_already_processed compares RESOLVED recipient wikilinks
@@ -1932,7 +2004,8 @@ def main():
 
             # Frontmatter
             email["frontmatter"] = generate_email_frontmatter(email)
-            email["output_filename"] = generate_email_filename(email)
+            email["output_filename"] = resolve_output_collision(
+                generate_email_filename(email), email.get("date", ""), vault, assigned_names)
 
             kept_emails.append(email["file"])
             kept_manifest.append(email)
@@ -1949,7 +2022,21 @@ def main():
             # when attendee count == 2 + Sam) back to the top-level field so the
             # compact summary matches the frontmatter and output_filename.
             transcript["meeting_type"] = fm.get("meeting-type", transcript.get("meeting_type", "general"))
-            transcript["output_filename"] = generate_transcript_filename(transcript, fm)
+            transcript["output_filename"] = resolve_output_collision(
+                generate_transcript_filename(transcript, fm), transcript.get("date", ""),
+                vault, assigned_names)
+
+        # Docs: assign reference-note names (rules: YYYY-MM-DD-{original-stem}.md
+        # in 08-Reference, dated the processing day since documents carry no
+        # intrinsic date). Same collision pre-resolution as notes: finalize.py
+        # moves staged files verbatim under these names.
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        for doc in result["docs"]:
+            stem = Path(doc["filename"]).stem
+            doc["date"] = today_str
+            doc["output_filename"] = resolve_output_collision(
+                f"{today_str}-{stem}.md", today_str, vault, assigned_names,
+                target="08-Reference")
 
         # Resolve definitive LOW entities too (for registry-only additions)
         for low in result["definitive_lows"]:
@@ -2084,9 +2171,9 @@ def main():
     result["backlog_reason"] = backlog_reason
     result["date_span_days"] = date_span_days
 
-    # Run-time estimate for the /w-daily heads-up and lite mode. Also stamps
-    # each transcript with its stakes class + per-item estimate, which the
-    # compact transcript list below surfaces for the lite-mode choice prompt.
+    # Run-time estimate for the /w-daily heads-up line. Also stamps each
+    # transcript with its stakes class + per-item estimate (stakes drives the
+    # Haiku triage for low-stakes recordings).
     eta = estimate_eta(result, counts)
     result["eta"] = eta
 
@@ -2123,7 +2210,7 @@ def main():
             for e in result["email_manifest"]
         ],
         # Compact transcript list: file, subject, date, meeting_type, stakes,
-        # est_minutes, output_filename (stakes/est_minutes drive lite-mode choice)
+        # est_minutes, output_filename (stakes drives Haiku triage)
         "transcripts": [
             {
                 "file": t["file"],
