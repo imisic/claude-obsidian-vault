@@ -48,16 +48,21 @@ If context is ambiguous (can't tell who initiated), skip the item and list it in
 
 ## Phase 3: Rebuild indexes
 
-After any fixes:
+Always rebuild, even on a dry run with no fixes. `build-open-actions.py` is idempotent and only regenerates a derived index, so running it is safe. This guarantees the count reported in Phase 4 reflects current on-disk state and matches the live Obsidian dashboard (which reads the notes directly via Dataview), rather than a stale `open-actions.json` from a previous run.
 ```bash
 python _scripts/build-open-actions.py --vault "$VAULT"
 ```
 
 ## Phase 4: Report
 
+Read the counts from the freshly-rebuilt index. Do NOT hand-write a one-liner to count them: `open-actions.json` is a dict, so `len()` on it returns the number of keys, not the number of tasks. Use the `total_*` fields directly:
+```bash
+python -c "import json; d=json.load(open('_db/open-actions.json')); print(f\"open={d['total_open']} completed={d['total_completed']} demoted={d['total_demoted']}\")"
+```
+
 Report to user:
 - How many tasks scanned
 - How many delegated-by tags added
 - How many noise tasks removed
 - How many still need review (if any)
-- Current open task count
+- Current open task count (the `total_open` value above, NOT a derived count)
