@@ -72,7 +72,7 @@ def phase0(vault: Path, target_date: str, warnings: list[str]) -> str | None:
         [py, str(SCRIPT_DIR / "build-thread-index.py"), "--vault", str(vault), "--incremental"],
         [py, str(SCRIPT_DIR / "build-email-lookup.py"), "--vault", str(vault)],
         ["bash", str(SCRIPT_DIR / "check-ingest-log.sh"), "--if-stale", str(vault)],
-        [py, str(SCRIPT_DIR / "pull-plaud.py"), "--quiet"],
+        [py, str(SCRIPT_DIR / "pull-plaud.py"), "--quiet", "--archive-ai"],
         [py, str(SCRIPT_DIR / "archive-calendar.py"), "--vault", str(vault), "--quiet"],
     ]
     procs = []

@@ -14,6 +14,7 @@ PLAUD_TOKEN; used only when OAuth isn't configured.
 Usage:
   python pull-plaud.py                  # pull new recordings since last sync
   python pull-plaud.py --all            # pull all recordings (first run)
+  python pull-plaud.py --archive-ai     # also save Plaud AI summary/minutes as a sidecar in _attachments
   python pull-plaud.py --download-audio # also save MP3s to _attachments/
   python pull-plaud.py --dry-run        # show what would be pulled, don't write
 """
@@ -236,12 +237,30 @@ def fetch_plaud_ai_content(detail):
                     _fetch_s3_content(url, expect_json=True) if url else None)
             elif dtype in ("auto_sum_note", "consumer_note"):
                 label = item.get("data_tab_name") or dtype
-                result[label] = inline if inline else (
+                raw = inline if inline else (
                     _fetch_s3_content(url, expect_json=False) if url else None)
+                result[label] = _unwrap_note_markdown(raw)
         except Exception:
             pass  # non-critical, transcript is what matters
 
     return {k: v for k, v in result.items() if v}
+
+
+def _unwrap_note_markdown(raw):
+    """Plaud wraps a note's markdown in a JSON envelope (`{"ai_content": "# ...",
+    "header": {...}, ...}`). Extract the readable markdown so the archive is
+    human-readable, not an escaped JSON blob. Falls back to the raw value if it
+    isn't the expected envelope.
+    """
+    if not isinstance(raw, str):
+        return raw
+    try:
+        obj = json.loads(raw)
+    except (ValueError, TypeError):
+        return raw
+    if isinstance(obj, dict):
+        return obj.get("ai_content") or obj.get("content") or raw
+    return raw
 
 
 def load_speaker_map():
@@ -357,7 +376,7 @@ def speakers_to_attendees(speakers):
     return "; ".join(attendees) if attendees else "plaud-import"
 
 
-def build_transcript_file(detail, file_summary, include_ai=False, lookup=None, name_map=None, speaker_map=None):
+def build_transcript_file(detail, file_summary, lookup=None, name_map=None, speaker_map=None):
     """Build a Meeting Recorder-compatible transcript string from Plaud data.
 
     Returns (content, status, unresolved_speakers).
@@ -399,29 +418,38 @@ def build_transcript_file(detail, file_summary, include_ai=False, lookup=None, n
     body = "\n".join(transcript_lines)
     content = f"{header}\n{body}\n"
 
-    # Optionally append Plaud's AI content as a reference block
-    if include_ai:
-        ai_content = fetch_plaud_ai_content(detail)
-        if ai_content:
-            content += "\n--- PLAUD AI CONTENT (reference only) ---\n"
-            for label, text in ai_content.items():
-                if label == "outline":
-                    # Format outline as readable topic list
-                    content += f"\n### Outline\n"
-                    for topic in text if isinstance(text, list) else []:
-                        ts = ms_to_timestamp(topic.get("start_time", 0))
-                        content += f"  {ts} {topic.get('topic', '')}\n"
-                elif isinstance(text, str):
-                    content += f"\n### {label}\n{text}\n"
-
     return content, "ok", unresolved
+
+
+def format_ai_sidecar(ai_content, filename, plaud_file_id):
+    """Format Plaud's AI content (summary/minutes/outline) as a standalone
+    markdown archive. This is written directly to _attachments/ and NEVER enters
+    the inbox: the note-writing agent must not see Plaud's synthesis, only the
+    raw transcript (see the anti-fabrication rule in rules/verification.md).
+    Kept purely for offline preservation.
+    """
+    parts = [
+        f"# Plaud AI content: {filename}",
+        "",
+        f"> Archived from Plaud (file id `{plaud_file_id}`). Reference only, not ingested into the vault note.",
+    ]
+    for label, text in ai_content.items():
+        if label == "outline":
+            parts.append("\n## Outline")
+            for topic in text if isinstance(text, list) else []:
+                ts = ms_to_timestamp(topic.get("start_time", 0))
+                parts.append(f"- {ts} {topic.get('topic', '')}")
+        elif isinstance(text, str):
+            parts.append(f"\n## {label}\n\n{text}")
+    return "\n".join(parts) + "\n"
 
 
 def main():
     parser = argparse.ArgumentParser(description="Pull Plaud recordings into Vault inbox")
     parser.add_argument("--all", action="store_true", help="Pull all recordings, not just new ones")
     parser.add_argument("--download-audio", action="store_true", help="Also download MP3 to _attachments/")
-    parser.add_argument("--include-ai", action="store_true", help="Append Plaud AI summary/minutes to transcript")
+    parser.add_argument("--archive-ai", action="store_true",
+                        help="Archive Plaud AI summary/minutes/outline as a sidecar in _attachments (never fed to the note agent)")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be pulled, don't write files")
     parser.add_argument("--quiet", action="store_true", help="Suppress progress output (for pipeline use)")
     parser.add_argument("--limit", type=int, default=0, help="Max number of recordings to pull (0 = all new)")
@@ -492,7 +520,7 @@ def main():
             detail = client.get_file_detail(file_id)
 
             transcript_content, status, unresolved = build_transcript_file(
-                detail, f, include_ai=args.include_ai,
+                detail, f,
                 lookup=lookup, name_map=name_map, speaker_map=speaker_map
             )
 
@@ -520,6 +548,19 @@ def main():
             pulled += 1
             for spk in unresolved:
                 unresolved_speakers[spk] = unresolved_speakers.get(spk, 0) + 1
+
+            # Optional AI archive: a sidecar in _attachments next to where the
+            # transcript lands (finalize.py moves the .txt there under the same
+            # stem). Written straight to _attachments so it bypasses the inbox
+            # and the note agent never reads Plaud's synthesis.
+            if args.archive_ai:
+                ai_content = fetch_plaud_ai_content(detail)
+                if ai_content:
+                    ATTACHMENTS_DIR.mkdir(parents=True, exist_ok=True)
+                    sidecar_path = ATTACHMENTS_DIR / f"{out_path.stem}.plaud-ai.md"
+                    sidecar_path.write_text(
+                        format_ai_sidecar(ai_content, filename, file_id), encoding="utf-8")
+                    log(f"    AI archive -> {sidecar_path.name}")
 
             # Optional audio download
             if args.download_audio:
