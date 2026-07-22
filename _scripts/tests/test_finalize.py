@@ -520,3 +520,69 @@ def test_move_email_attachments_noop_without_stamp(tmp_path):
     finalize.move_email_attachments([name], "", tmp_path, result)
     assert result["moved_to_attachments"] == []
     assert not (tmp_path / "_attachments" / "email").exists()
+
+
+# --- promoted email attachments (docs with is_email_attachment) -------------
+
+REF_NOTE = """---
+date: 2026-07-03
+type: reference
+source-file: {source}
+summary: "A promoted deck summary"
+source-email: "[[2026-07-03-email-test-subject]]"
+---
+
+Deck content.
+"""
+
+
+def test_promoted_email_attachment_is_moved_not_deleted(tmp_path):
+    """A docs entry flagged is_email_attachment must produce its reference note
+    AND leave the raw file for the parent email's move_email_attachments, which
+    relocates it to _attachments/email/<stamp>/. Deleting it as a doc source
+    would strand the email note's attachment wikilink."""
+    _scaffold(tmp_path)
+    stamp = "2026-07-03_101500"
+    att_name = f"{stamp}-01-Q3 deck.pptx"
+
+    att_dir = tmp_path / "00-Inbox" / "_email-attachments"
+    att_dir.mkdir(parents=True, exist_ok=True)
+    (att_dir / att_name).write_text("rawbytes", encoding="utf-8")
+
+    email_src = tmp_path / "00-Inbox" / "_processing" / "email.txt"
+    email_src.write_text("x", encoding="utf-8")
+
+    email_ofn = "2026-07-03-email-test-subject.md"
+    ref_ofn = "2026-07-03-Q3 deck.md"
+    (tmp_path / "_db" / "staged-notes" / email_ofn).write_text(
+        EMAIL_NOTE.format(source="email.txt"), encoding="utf-8")
+    (tmp_path / "_db" / "staged-notes" / ref_ofn).write_text(
+        REF_NOTE.format(source=att_name), encoding="utf-8")
+
+    _write_manifest(
+        tmp_path,
+        email_manifest=[{
+            "file": "00-Inbox/_processing/email.txt",
+            "output_filename": email_ofn,
+            "attachments": [att_name],
+            "attachment_stamp": stamp,
+        }],
+        docs=[{
+            "file": f"00-Inbox/_email-attachments/{att_name}",
+            "filename": att_name,
+            "output_filename": ref_ofn,
+            "is_email_attachment": True,
+            "source_email": "2026-07-03-email-test-subject",
+        }],
+    )
+    res = _run(tmp_path)
+
+    # Both the email interaction note and the promoted reference note land.
+    assert any(email_ofn in w for w in res["written"]), res
+    assert any(ref_ofn in w for w in res["written"]), res
+    # The raw attachment is relocated (linked), never deleted or stranded.
+    moved = tmp_path / "_attachments" / "email" / stamp / att_name
+    assert moved.exists(), res
+    assert not (att_dir / att_name).exists(), res
+    assert all(att_name not in d for d in res["deleted_sources"]), res
+    assert any(att_name in m for m in res["moved_to_attachments"]), res

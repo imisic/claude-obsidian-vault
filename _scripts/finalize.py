@@ -592,7 +592,9 @@ def main():
     for d in manifest.get("docs", []):
         ofn = d.get("output_filename")
         if ofn:
-            expected[ofn] = {"source": d.get("file"), "ctype": "doc"}
+            expected[ofn] = {"source": d.get("file"), "ctype": "doc",
+                             "is_email_attachment": d.get("is_email_attachment", False),
+                             "source_email": d.get("source_email")}
 
     ingest_log = load_ingest_log(vault)
     vip_slugs = load_vip_slugs(vault)
@@ -717,6 +719,12 @@ def main():
                                            exp.get("attachment_stamp") or "",
                                            vault, result)
                     delete_source(src_path, vault, result)
+                elif exp["ctype"] == "doc" and exp.get("is_email_attachment"):
+                    # A promoted email attachment: its raw file is moved to
+                    # _attachments/email/<stamp>/ by the parent email's
+                    # move_email_attachments and stays linked from the email.
+                    # Don't delete it here (that would strand that wikilink).
+                    pass
                 else:
                     delete_source(src_path, vault, result)
             except ValueError as ex:

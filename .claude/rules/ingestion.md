@@ -231,7 +231,7 @@ Note: Structured transcript headers (`MeetingSubject`, `MeetingDate`, `Attendees
 | Manual meeting notes (.md from Obsidian) | **Delete from 00-Inbox/** | Cleaned note moved to 05-Interactions/YYYY/ |
 | Documents (PDF/DOCX/PPTX/XLSX/HTML) | **Delete from 00-Inbox/** | Fully converted to .md in 08-Reference/ |
 | Emails (.txt from inbox) | **Delete from 00-Inbox/** | Content captured in interaction note. OneDrive originals in `Processed/` subfolder |
-| Email attachments (any type) | **Move to `_attachments/email/<stamp>/`** | Kept raw and linked from the email note's `attachments:` frontmatter. See `ingestion-email.md` |
+| Email attachments (any type) | **Move to `_attachments/email/<stamp>/`** | Kept raw and linked from the email note's `attachments:` frontmatter (one physical copy). Document-type attachments (`utils.is_promotable_attachment`: pdf/Office) from note-producing emails are ALSO promoted to a `08-Reference/` markdown note via the doc pipeline (`is_email_attachment` doc entries, cross-linked to the email via `source-email:`); finalize skips their source-deletion so the email's move relocates the raw file. Images and other non-content types are not promoted. See `ingestion-email.md` |
 | Structured transcripts (.txt) | **Move to _attachments/** | Verbatim transcript has value beyond structured note |
 | Transcript companions (.json, .md) | **Move to _attachments/** alongside the .txt | Same stem; the .json carries the canonical metadata/segments/quality data, the .md is a generated preview |
 | Transcript screenshots (.png) | **Move to `_attachments/screenshots/<transcript-stem>/`** | Embedded inline in the meeting note via wikilinks; rewritten by finalize.py to the final path |

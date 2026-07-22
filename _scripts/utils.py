@@ -563,3 +563,30 @@ def apply_task_hygiene(line: str, frontmatter: dict, vip_slugs: set | None = Non
         return _inject_delegated_by(line)
 
     return line
+
+
+# ---------------------------------------------------------------------------
+# Email-attachment promotion
+# ---------------------------------------------------------------------------
+
+# Document-type email attachments worth converting to a searchable reference
+# note. Everything else (inline signature images, icons, .ics/.vcf/.p7s,
+# archives) stays raw-and-linked only. Images are the bulk of the junk and are
+# excluded simply by not being whitelisted here.
+PROMOTABLE_DOC_EXTS = {".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx"}
+
+# The capture flow stages attachments as "<yyyy-MM-dd_HHmmss>-NN-<name>".
+_ATTACH_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}-\d+-")
+
+
+def is_promotable_attachment(name: str) -> bool:
+    """True if an email attachment is a document worth converting to a reference
+    note (Office/PDF), not an inline image, signature logo, or other non-content
+    file. Extension-only: images (the common junk) are excluded by omission."""
+    return Path(name).suffix.lower() in PROMOTABLE_DOC_EXTS
+
+
+def strip_attachment_prefix(stem: str) -> str:
+    """Drop the '<stamp>-NN-' correlation prefix from a staged attachment stem so
+    the promoted reference note is named after the original document."""
+    return _ATTACH_PREFIX_RE.sub("", stem)

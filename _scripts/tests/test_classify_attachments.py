@@ -134,3 +134,63 @@ def test_wikilink_body_has_no_brackets():
     fm = _fm("2026-01-09_001240", ["2026-01-09_001240-01-Report(1).pdf"])
     inner = fm["attachments"][0][2:-2]
     assert "[" not in inner and "]" not in inner
+
+
+# --- attachment promotion helpers (utils, re-exported by classify) ----------
+# Substantive email attachments (decks, specs, spreadsheets) are promoted to
+# reference notes so their content is searchable; images/logos/junk are not.
+
+def test_is_promotable_attachment_accepts_office_and_pdf():
+    for n in ["deck.pptx", "spec.docx", "sheet.xlsx", "concept.PDF",
+              "old.ppt", "legacy.doc", "book.xls"]:
+        assert ci.is_promotable_attachment(n), n
+
+
+def test_is_promotable_attachment_rejects_images_and_junk():
+    for n in ["image001.png", "logo.JPG", "photo.jpeg", "sig.gif",
+              "cal.ics", "card.vcf", "smime.p7s", "notes.txt", "bundle.zip"]:
+        assert not ci.is_promotable_attachment(n), n
+
+
+def test_strip_attachment_prefix_removes_stamp_only():
+    assert ci.strip_attachment_prefix(
+        "2026-01-20_064632-04-Quarterly Roadmap EN"
+    ) == "Quarterly Roadmap EN"
+    # A name without the stamp prefix is returned unchanged.
+    assert ci.strip_attachment_prefix("Plain Deck Name") == "Plain Deck Name"
+
+
+# --- promote_email_attachments (the injection that builds docs entries) ------
+
+def test_promote_email_attachments_builds_correct_doc_entries(tmp_path):
+    """A pdf/Office attachment on a note-producing email becomes a docs entry
+    with the right markers; images and attachment-less emails yield nothing."""
+    kept = [
+        {"output_filename": "2026-01-20-email-market-research.md",
+         "date": "2026-01-20",
+         "attachments": [
+             "2026-01-20_064632-04-Quarterly Roadmap EN.pptx",  # promote
+             "2026-01-20_064632-01-image001.png",               # skip (image)
+             "2026-01-20_064839-01-Vendor Assessment.pdf",      # promote
+         ]},
+        {"output_filename": "2026-01-21-email-no-attachments.md",
+         "date": "2026-01-21", "attachments": []},              # nothing
+    ]
+    docs = ci.promote_email_attachments(kept, tmp_path)
+    assert len(docs) == 2, docs
+    d0 = docs[0]
+    assert d0["is_email_attachment"] is True
+    assert d0["source_email"] == "2026-01-20-email-market-research"
+    assert d0["date"] == "2026-01-20"
+    assert d0["clean_stem"] == "Quarterly Roadmap EN"
+    assert d0["filename"] == "2026-01-20_064632-04-Quarterly Roadmap EN.pptx"
+    assert "_email-attachments" in d0["file"] and d0["filename"] in d0["file"]
+    # output_filename is intentionally NOT set here (assigned by the docs pass).
+    assert "output_filename" not in d0
+    assert docs[1]["clean_stem"] == "Vendor Assessment"
+
+
+def test_promote_email_attachments_empty_when_no_promotables(tmp_path):
+    kept = [{"output_filename": "e.md", "date": "2026-01-20",
+             "attachments": ["logo.png", "cal.ics", "smime.p7s"]}]
+    assert ci.promote_email_attachments(kept, tmp_path) == []

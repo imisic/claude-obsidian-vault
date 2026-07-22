@@ -28,6 +28,7 @@ from utils import (REPLY_PREFIXES, normalize_subject, subject_to_slug,
                    guess_wikilink_from_email, company_from_domain,
                    generate_pii_token, ensure_utf8_stdio, atomic_json_write,
                    atomic_text_write, apply_vip_boost, recipient_set,
+                   is_promotable_attachment, strip_attachment_prefix,
                    OWNER_SLUG, OWNER_PERSONAL_EMAILS, LOCAL_TZ)
 
 
@@ -1024,6 +1025,42 @@ def resolve_participants(email_meta: dict, lookup: dict) -> None:
                 "company": r.get("company", ""),
             })
     email_meta["unresolved_entities"] = unresolved
+
+
+def promote_email_attachments(kept_manifest: list, vault: Path) -> list:
+    """Build `docs` manifest entries for the substantive attachments (pdf/Office,
+    per is_promotable_attachment) of note-producing emails, so the doc pipeline
+    converts their content into 08-Reference/ notes. `output_filename` is left
+    unset here: the shared docs collision pass assigns it (using `clean_stem` and
+    the email's `date`). Each entry carries `is_email_attachment` so finalize.py
+    writes the reference note but skips source-deletion, letting the parent
+    email's `move_email_attachments` relocate the single raw file.
+
+    Failure-posture notes (both self-heal on the next run, never lose data):
+    - If the parent email quarantines, its `move_email_attachments` doesn't run,
+      so the raw file waits a cycle in `_email-attachments/` and the reference
+      note's `source-email` backlink is dangling until the email reprocesses.
+    - Only the note-writing AGENT needs the staged source (Step 2); finalize does
+      not (it `pass`es). So a promoted-doc note quarantined on a late check (e.g.
+      summary length) re-finalizes fine even after the email already moved the
+      raw file, since the note content already exists and no reconversion runs.
+    """
+    attach_staging = vault / "00-Inbox" / "_email-attachments"
+    promoted = []
+    for email in kept_manifest:
+        email_stem = Path(email.get("output_filename", "")).stem
+        for name in email.get("attachments", []):
+            if not is_promotable_attachment(name):
+                continue
+            promoted.append({
+                "file": str(attach_staging / name),
+                "filename": name,
+                "date": email.get("date", ""),
+                "clean_stem": strip_attachment_prefix(Path(name).stem),
+                "is_email_attachment": True,
+                "source_email": email_stem,
+            })
+    return promoted
 
 
 def resolve_transcript_attendees(transcript_meta: dict, lookup: dict) -> None:
@@ -2059,6 +2096,11 @@ def main():
         result["emails"] = kept_emails
         result["email_manifest"] = kept_manifest
 
+        # Promote substantive email attachments to reference notes (content
+        # searchable, raw file still linked). output_filename is assigned by the
+        # shared docs collision pass below.
+        result["docs"].extend(promote_email_attachments(kept_manifest, vault))
+
         # Resolve transcript attendees
         for transcript in result["transcripts"]:
             resolve_transcript_attendees(transcript, lookup)
@@ -2078,10 +2120,12 @@ def main():
         # moves staged files verbatim under these names.
         today_str = datetime.now().strftime("%Y-%m-%d")
         for doc in result["docs"]:
-            stem = Path(doc["filename"]).stem
-            doc["date"] = today_str
+            # Promoted email attachments carry a cleaned stem (stamp prefix
+            # stripped) and the email's own date; standalone docs use today.
+            stem = doc.get("clean_stem") or Path(doc["filename"]).stem
+            doc["date"] = doc.get("date") or today_str
             doc["output_filename"] = resolve_output_collision(
-                f"{today_str}-{stem}.md", today_str, vault, assigned_names,
+                f"{doc['date']}-{stem}.md", doc["date"], vault, assigned_names,
                 target="08-Reference")
 
         # Resolve definitive LOW entities too (for registry-only additions)

@@ -6,6 +6,8 @@ You write ONE reference note from ONE document file (PDF, DOCX, PPTX, XLSX, or H
 
 Below this template is a JSON slice for this document: the source file path, file type, `output_filename`, and any people/products/projects already resolved to wikilinks from the filename or surrounding context. Trust the slice's resolved entities: never open the entity registry or `04-People/` files. Resolve names in the body ONLY against the wikilinks the slice gives you; leave anything else as plain text.
 
+If the slice has `is_email_attachment: true`, this document came in as an email attachment (the raw file stays linked from that email). Add `source-email: "[[<source_email>]]"` to the frontmatter using the slice's `source_email` value, so the reference note back-links to the conversation it arrived in.
+
 ## Conversion
 
 - **PDF**: `markitdown` if installed, else read directly (Read tool handles PDFs natively; use `pages` for long files).
@@ -29,6 +31,7 @@ date: YYYY-MM-DD
 type: reference
 source-file: original-filename
 summary: ""                 # 1-line description, plain text, ALWAYS double-quoted
+source-email: "[[...]]"      # only when slice has is_email_attachment: true (from source_email)
 project:                     # optional, if identifiable
 tags: []                      # optional
 ```
