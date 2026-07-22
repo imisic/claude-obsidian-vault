@@ -21,6 +21,7 @@ Determine type BEFORE routing. Check in this order:
 **Skip** (do not process):
 - `*-calendar.json` files: consumed by the recorder app, not by ingestion pipeline. Leave in place.
 - `_processing/` subdirectory contents: staging area for in-flight files
+- `_email-attachments/` subdirectory contents: email attachments staged by `Pull-Emails.ps1`, claimed by their parent email via the receive-second stamp (see `ingestion-email.md`). Never classify these as documents. Directories are already skipped by the `is_file()` filter in `classify-inbox.py`, so this needs no special-casing, but a loose attachment sitting in `00-Inbox/` root WOULD be routed to `08-Reference/` as an orphan reference note
 
 **Email** (route to 05-Interactions/YYYY/):
 - `.txt` file matching Power Automate format (`From:`/`Type From:` AND `Subject:`/`Type Subject:` AND `Date:`/`Type Date:` in first 8 lines)
@@ -230,6 +231,7 @@ Note: Structured transcript headers (`MeetingSubject`, `MeetingDate`, `Attendees
 | Manual meeting notes (.md from Obsidian) | **Delete from 00-Inbox/** | Cleaned note moved to 05-Interactions/YYYY/ |
 | Documents (PDF/DOCX/PPTX/XLSX/HTML) | **Delete from 00-Inbox/** | Fully converted to .md in 08-Reference/ |
 | Emails (.txt from inbox) | **Delete from 00-Inbox/** | Content captured in interaction note. OneDrive originals in `Processed/` subfolder |
+| Email attachments (any type) | **Move to `_attachments/email/<stamp>/`** | Kept raw and linked from the email note's `attachments:` frontmatter. See `ingestion-email.md` |
 | Structured transcripts (.txt) | **Move to _attachments/** | Verbatim transcript has value beyond structured note |
 | Transcript companions (.json, .md) | **Move to _attachments/** alongside the .txt | Same stem; the .json carries the canonical metadata/segments/quality data, the .md is a generated preview |
 | Transcript screenshots (.png) | **Move to `_attachments/screenshots/<transcript-stem>/`** | Embedded inline in the meeting note via wikilinks; rewritten by finalize.py to the final path |

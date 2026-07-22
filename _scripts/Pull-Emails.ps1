@@ -9,17 +9,30 @@
 # - Received emails keep original filename
 # - Originals move to Processed/ subfolder after successful copy
 # - Collision detection: appends -2, -3 etc. if destination already exists
+# - Attachments land in 00-Inbox\_email-attachments\ (a dir, so classify-inbox's
+#   is_file() filter skips it) and are matched to their email by receive-second
 
 $ErrorActionPreference = "Stop"
 
-$SentDir   = "$env:USERPROFILE\OneDrive - Acme Corp\EmailCapture\Sent"
-$VaultDir  = "$env:USERPROFILE\OneDrive - Acme Corp\EmailCapture\Vault"
 # Your vault's local path (edit to match where your vault lives):
-$Inbox     = "$env:USERPROFILE\Obsidian\Vault\00-Inbox"
-$LogFile   = "$env:USERPROFILE\Obsidian\Vault\_scripts\pull-emails.log"
+$VaultRoot     = "$env:USERPROFILE\Obsidian\Vault"
+$SentDir       = "$env:USERPROFILE\OneDrive - Acme Corp\EmailCapture\Sent"
+$VaultDir      = "$env:USERPROFILE\OneDrive - Acme Corp\EmailCapture\Vault"
+$AttachDir     = "$env:USERPROFILE\OneDrive - Acme Corp\EmailCapture\Vault\Attachments"
+$Inbox         = "$VaultRoot\00-Inbox"
+$AttachStaging = "$Inbox\_email-attachments"
+$LogFile       = "$VaultRoot\_scripts\pull-emails.log"
+
+# The capture flow writes the .txt BEFORE its attachment loop, so an email
+# reliably hits disk a second or so ahead of its own attachments (observed: .txt
+# at 13:12:21, PDF at 13:12:22). Pulling inside that gap would process the email
+# attachment-less and orphan the PDF permanently, since nothing re-links it
+# afterwards. Defer any email that has not sat still this long; it costs one
+# scheduled cycle at worst.
+$SettleSeconds = 120
 
 # Ensure directories exist
-foreach ($dir in @("$SentDir\Processed", "$VaultDir\Processed", $Inbox)) {
+foreach ($dir in @("$SentDir\Processed", "$VaultDir\Processed", "$AttachDir\Processed", $Inbox, $AttachStaging)) {
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
 }
 
@@ -34,6 +47,8 @@ if ((Test-Path $LogFile) -and (Get-Item $LogFile).Length -gt 500KB) {
 $timestamp = Get-Date -Format "yyyy-MM-ddTHH:mm:ss"
 $countSent = 0
 $countRecv = 0
+$countAtt = 0
+$countDeferred = 0
 $errors = @()
 
 # Helper: get unique destination path (appends -2, -3 etc. on collision)
@@ -46,6 +61,30 @@ function Get-UniqueDestination {
     $counter = 2
     while (Test-Path -LiteralPath (Join-Path $Dir "$base-$counter$ext")) { $counter++ }
     return Join-Path $Dir "$base-$counter$ext"
+}
+
+# Helper: make an attachment filename safe to put inside an Obsidian [[wikilink]].
+# Outlook suffixes duplicate names with [1], and [ ] | # ^ all break wikilink
+# syntax. The flow's yyyy-MM-dd_HHmmss-NN- prefix contains none of these, so
+# rewriting the tail never affects email-to-attachment matching.
+function Get-WikilinkSafeName {
+    param([string]$Name)
+    return $Name -replace '\[', '(' -replace '\]', ')' -replace '[|#^]', '-'
+}
+
+# Pull attachments FIRST, so an email pulled later in this same run always finds
+# its own attachments already staged.
+Get-ChildItem -LiteralPath $AttachDir -File -ErrorAction SilentlyContinue | ForEach-Object {
+    $safe = Get-WikilinkSafeName -Name $_.Name
+    $dest = Get-UniqueDestination -Dir $AttachStaging -Name $safe
+    try {
+        Copy-Item -LiteralPath $_.FullName -Destination $dest -Force
+        Move-Item -LiteralPath $_.FullName -Destination (Get-UniqueDestination -Dir "$AttachDir\Processed" -Name $_.Name) -Force
+        $countAtt++
+    } catch {
+        $errors += "attachment: $($_.TargetObject) - $($_.Exception.Message)"
+        if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Force -ErrorAction SilentlyContinue }
+    }
 }
 
 # Pull sent emails (prefix with SENT-)
@@ -62,8 +101,15 @@ Get-ChildItem -LiteralPath $SentDir -Filter "*.txt" -File -ErrorAction SilentlyC
     }
 }
 
-# Pull received emails (no prefix)
-Get-ChildItem -LiteralPath $VaultDir -Filter "*.txt" -File -ErrorAction SilentlyContinue | ForEach-Object {
+# Pull received emails (no prefix). Skip any that have not settled: their
+# attachments may still be syncing down from OneDrive. Sent mail has no
+# attachment capture, so it is never deferred.
+Get-ChildItem -LiteralPath $VaultDir -Filter "*.txt" -File -ErrorAction SilentlyContinue | Where-Object {
+    if ((New-TimeSpan -Start $_.LastWriteTime -End (Get-Date)).TotalSeconds -lt $SettleSeconds) {
+        $script:countDeferred++
+        $false
+    } else { $true }
+} | ForEach-Object {
     $dest = Get-UniqueDestination -Dir $Inbox -Name $_.Name
     try {
         Copy-Item -LiteralPath $_.FullName -Destination $dest -Force
@@ -115,8 +161,9 @@ foreach ($err in $errors) {
 }
 
 # Log summary (only if something was pulled or errors occurred)
-if ($countSent -gt 0 -or $countRecv -gt 0 -or $countCal -gt 0 -or $errors.Count -gt 0) {
-    $summary = "$timestamp Pulled $countSent sent, $countRecv received, $countCal calendar"
+if ($countSent -gt 0 -or $countRecv -gt 0 -or $countCal -gt 0 -or $countAtt -gt 0 -or $errors.Count -gt 0) {
+    $summary = "$timestamp Pulled $countSent sent, $countRecv received, $countAtt attachments, $countCal calendar"
+    if ($countDeferred -gt 0) { $summary += " ($countDeferred deferred, not settled)" }
     if ($errors.Count -gt 0) { $summary += " ($($errors.Count) errors)" }
     Add-Content -Path $LogFile -Value $summary
 }

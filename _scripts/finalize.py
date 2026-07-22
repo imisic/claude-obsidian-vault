@@ -512,6 +512,34 @@ def move_screenshots(screenshots: list, stem: str, vault: Path, result: dict) ->
         result["moved_to_attachments"].append(str(dest.relative_to(vault)))
 
 
+def move_email_attachments(names: list, stamp: str, vault: Path, result: dict) -> None:
+    """Move staged email attachments into _attachments/email/<stamp>/, matching
+    the wikilinks classify-inbox already wrote into the note's frontmatter.
+
+    Keyed on the receive-second stamp rather than the email's .txt stem: the stem
+    is a subject slug that can run ~90 chars and carry emoji, while the stamp is
+    short, unique per message, and already the correlation key.
+    """
+    if not names or not stamp:
+        return
+    staging = vault / "00-Inbox" / "_email-attachments"
+    target = vault / "_attachments" / "email" / stamp
+    for name in names:
+        real = resolve_existing(staging / name)
+        if not real:
+            result["warnings"].append(f"email attachment source missing: {name}")
+            continue
+        target.mkdir(parents=True, exist_ok=True)
+        dest = target / real.name
+        if dest.exists():
+            # Same stamp + same name means the same file: a re-run, not a clash.
+            # Renaming would strand the frontmatter wikilink that points here.
+            result["warnings"].append(f"email attachment already present: {stamp}/{name}")
+            continue
+        shutil.move(str(real), str(dest))
+        result["moved_to_attachments"].append(str(dest.relative_to(vault)))
+
+
 def delete_source(src_path: Path, vault: Path, result: dict) -> None:
     """Unicode-robust delete of an in-vault source; records the relative path."""
     real = resolve_existing(src_path)
@@ -553,7 +581,9 @@ def main():
     for e in manifest.get("email_manifest", []):
         ofn = e.get("output_filename")
         if ofn:
-            expected[ofn] = {"source": e.get("file"), "ctype": "email"}
+            expected[ofn] = {"source": e.get("file"), "ctype": "email",
+                             "attachments": e.get("attachments") or [],
+                             "attachment_stamp": e.get("attachment_stamp") or ""}
     for t in manifest.get("transcripts", []):
         ofn = t.get("output_filename")
         if ofn:
@@ -682,6 +712,11 @@ def main():
                     stem = src_path.stem
                     move_to_attachments(src_path, vault, result)
                     move_screenshots(exp.get("screenshots") or [], stem, vault, result)
+                elif exp["ctype"] == "email":
+                    move_email_attachments(exp.get("attachments") or [],
+                                           exp.get("attachment_stamp") or "",
+                                           vault, result)
+                    delete_source(src_path, vault, result)
                 else:
                     delete_source(src_path, vault, result)
             except ValueError as ex:

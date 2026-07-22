@@ -456,3 +456,67 @@ def test_skips_delete_and_move(tmp_path):
     assert set(result["skipped"]) == {"dup.txt", "keep.txt"}
     log = _ingest_log(tmp_path)
     assert any(e["action"] == "skipped-duplicate" for e in log)
+
+
+# --- move_email_attachments -------------------------------------------------
+
+def _stage_attachment(vault, name):
+    d = vault / "00-Inbox" / "_email-attachments"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / name).write_text("payload", encoding="utf-8")
+    return d
+
+
+def _blank_result():
+    return {"moved_to_attachments": [], "warnings": []}
+
+
+def test_move_email_attachments_lands_under_stamp(tmp_path):
+    name = "2026-01-09_001240-01-deck.pdf"
+    staging = _stage_attachment(tmp_path, name)
+    result = _blank_result()
+
+    finalize.move_email_attachments([name], "2026-01-09_001240", tmp_path, result)
+
+    dest = tmp_path / "_attachments" / "email" / "2026-01-09_001240" / name
+    assert dest.exists(), "attachment should land in the stamp folder"
+    assert not (staging / name).exists(), "staged copy should be moved, not copied"
+    assert result["moved_to_attachments"] == [
+        f"_attachments/email/2026-01-09_001240/{name}"]
+
+
+def test_move_email_attachments_warns_on_missing_source(tmp_path):
+    """A manifest naming a file that is gone must warn, not crash the run."""
+    result = _blank_result()
+    finalize.move_email_attachments(["gone.pdf"], "2026-01-09_001240", tmp_path, result)
+    assert result["moved_to_attachments"] == []
+    assert any("gone.pdf" in w for w in result["warnings"])
+
+
+def test_move_email_attachments_does_not_rename_on_reencounter(tmp_path):
+    """Same stamp + same name is the same file (a re-run), not a collision.
+
+    Renaming to -2 would strand the frontmatter wikilink classify-inbox already
+    wrote, which points at the original name.
+    """
+    name = "2026-01-09_001240-01-deck.pdf"
+    existing = tmp_path / "_attachments" / "email" / "2026-01-09_001240"
+    existing.mkdir(parents=True)
+    (existing / name).write_text("original", encoding="utf-8")
+    _stage_attachment(tmp_path, name)
+    result = _blank_result()
+
+    finalize.move_email_attachments([name], "2026-01-09_001240", tmp_path, result)
+
+    assert (existing / name).read_text(encoding="utf-8") == "original"
+    assert not (existing / "2026-01-09_001240-01-deck-2.pdf").exists()
+    assert any("already present" in w for w in result["warnings"])
+
+
+def test_move_email_attachments_noop_without_stamp(tmp_path):
+    name = "loose.pdf"
+    _stage_attachment(tmp_path, name)
+    result = _blank_result()
+    finalize.move_email_attachments([name], "", tmp_path, result)
+    assert result["moved_to_attachments"] == []
+    assert not (tmp_path / "_attachments" / "email").exists()

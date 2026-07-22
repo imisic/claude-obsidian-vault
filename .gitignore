@@ -7,16 +7,17 @@
 # The plugin list in community-plugins.json is enough to reinstall them.
 .obsidian/plugins/
 
-# Large binary files
-_attachments/*.mp3
-_attachments/*.mp4
-_attachments/*.wav
-_attachments/*.m4a
-_attachments/*.pptx
-_attachments/*.docx
-_attachments/*.xlsx
-_attachments/*.pdf
-_attachments/*.zip
+# Large binary files. Recursive (`**`) so they stay out of history wherever they
+# land, not just at the top level.
+_attachments/**/*.mp3
+_attachments/**/*.mp4
+_attachments/**/*.wav
+_attachments/**/*.m4a
+_attachments/**/*.pptx
+_attachments/**/*.docx
+_attachments/**/*.xlsx
+_attachments/**/*.pdf
+_attachments/**/*.zip
 
 # Obsidian trash
 .trash/
@@ -81,6 +82,9 @@ _attachments/*.json
 _attachments/*.md
 _attachments/screenshots/*
 !_attachments/screenshots/.gitkeep
+# Email attachments are arbitrary sender files of any type, so an extension
+# whitelist cannot cover them. Ignored wholesale, same as screenshots.
+_attachments/email/
 
 # Internal working notes: docs/ subfolders are local-only by default.
 # Covers audit notes and brainstorming specs (docs/superpowers/), etc.

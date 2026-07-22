@@ -7,17 +7,38 @@ Email-specific rules extracted from the general ingestion pipeline. For general 
 Email pulling is handled by `_scripts/Pull-Emails.ps1`, a PowerShell script that runs every 15 minutes via Windows Task Scheduler (task name: `Vault-PullEmails`).
 
 **What it does:**
+- Copies attachments from `EmailCapture/Vault/Attachments/` → `00-Inbox/_email-attachments/` (**first**, so an email pulled later in the same run always finds its attachments already staged)
 - Copies `.txt` files from `EmailCapture/Sent/` → `00-Inbox/` with `SENT-` prefix
 - Copies `.txt` files from `EmailCapture/Vault/` → `00-Inbox/` with original filename
 - Moves originals to `Processed/` subfolder after successful copy
 - Copies `*-calendar.json` from `EmailCapture/Calendar/` → `00-Inbox/` (overwrite, not move, calendar is a snapshot)
 - Logs activity to `_scripts/pull-emails.log`
 
+**Settle guard (received emails only):** a `.txt` whose `LastWriteTime` is under `$SettleSeconds` (120) old is skipped and retried next run. The capture flow writes the `.txt` *before* its attachment loop, so an email lands on disk about a second ahead of its own attachments. Pulling inside that window would process the email attachment-less and orphan the attachment permanently, since nothing re-links it afterwards. Deferring costs one scheduled cycle at most. Sent emails have no attachment capture and are not deferred.
+
+**Wikilink-safe staging names:** attachment filenames are rewritten on copy (`[`→`(`, `]`→`)`, `|#^`→`-`). Outlook suffixes duplicate names with `[1]`, and `[ ] | # ^` all break Obsidian wikilink syntax. The flow's `yyyy-MM-dd_HHmmss-NN-` prefix contains none of these, so the rewrite never affects matching.
+
 **Setup:** Run `_scripts/Install-EmailPullTask.ps1` once in elevated PowerShell.
 
 **Source folders** (OneDrive, synced via Power Automate):
 - **Sent**: `%USERPROFILE%\OneDrive - Acme Corp\EmailCapture\Sent\`
 - **Received**: `%USERPROFILE%\OneDrive - Acme Corp\EmailCapture\Vault\`
+- **Attachments**: `%USERPROFILE%\OneDrive - Acme Corp\EmailCapture\Vault\Attachments\`
+
+### Email attachments
+
+The capture flow saves each attachment to `EmailCapture/Vault/Attachments/` named `<yyyy-MM-dd_HHmmss>-NN-<original name>`, where the timestamp is `formatDateTime(receivedDateTime,'yyyy-MM-dd_HHmmss')` and `NN` is a per-email counter (set the flow's `Apply to each` to Degree of Parallelism 1 so the counter cannot race).
+
+**The receive-second is the only join key.** There is no `Attachments:` header, and the filename carries no thread or message id. `ConversationId` is deliberately NOT usable: it identifies the *thread*, so every reply shares it, and keying on it would make the third reply's `deck.pdf` overwrite the first's.
+
+Correlation (`classify-inbox.py`):
+- `attachment_stamp(date_str)` derives the prefix from the `Date:` header by **string slicing**, not datetime parsing. Power Automate's `formatDateTime` does not shift the UTC offset, so normalising to local time here would invent a mismatch.
+- `find_staged_attachments(stamp, dir)` prefix-matches via `iterdir()`, never `glob()`: an Outlook `[1]` suffix is a glob character class and would silently match nothing.
+- Staged files matching no email are reported to stderr as `Warning: staged attachment matches no email:`. Only a matching email moves them out, so they would otherwise accumulate unseen.
+
+`finalize.py:move_email_attachments()` moves matched files to `_attachments/email/<stamp>/`, keyed on the stamp rather than the email's `.txt` stem (subject slugs run long and can carry emoji). The raw file is always kept and linked from the email note's `attachments:` frontmatter (see originals policy in `ingestion.md`).
+
+**Not covered:** sent-mail attachments (no `EmailCapture/Sent/Attachments` folder exists).
 
 **Key conventions:**
 - The `SENT-` filename prefix is the primary signal for `direction: sent` detection during parsing
@@ -117,4 +138,6 @@ tags:                      # optional, VIP tags for Obsidian filtering
 email-thread-count:        # optional, set when note consolidates N emails from same thread
 status: unprocessed        # only for HIGH relevance, omit for MEDIUM
 source-file: original-filename.txt
+attachments:               # optional, pre-built by classify-inbox from the staged files
+  - "[[email/<stamp>/<filename>]]"
 ```

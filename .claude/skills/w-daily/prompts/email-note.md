@@ -39,7 +39,10 @@ tags: [vip/boss-chain]
 email-thread-count:                    # optional, when consolidating N thread emails
 status: unprocessed                    # HIGH only, omit for MEDIUM
 source-file: original-filename.txt
+attachments: ["[[email/<stamp>/<file>]]"]  # from slice, copy verbatim, never invent
 ```
+
+`attachments` is pre-built and load-bearing: `finalize.py` moves the real files out of staging whether or not your note links them, so dropping the field strands a file in `_attachments/` that nothing points to. Copy it exactly as given, and never add it when the slice has none.
 
 ## Body
 

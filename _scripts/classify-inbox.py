@@ -203,6 +203,38 @@ def sanitize_transcript_agent_copy(src: Path, dest: Path, mappings: dict) -> boo
 # Email header parsing
 # ---------------------------------------------------------------------------
 
+def attachment_stamp(date_str: str) -> str:
+    """Derive the attachment filename prefix from an email's `Date:` header.
+
+    The capture flow names each attachment `<yyyy-MM-dd_HHmmss>-NN-<original
+    name>`, formatted from the same receivedDateTime this header carries.
+    Slicing the string rather than parsing to a datetime is deliberate: Power
+    Automate's formatDateTime does not shift the offset (verified: an input of
+    `2026-01-09T00:12:40+00:00` produced `2026-01-09_001240`), so any timezone
+    normalisation on our side would invent a mismatch.
+    """
+    if len(date_str) < 19 or date_str[10] != "T":
+        return ""
+    stamp = f"{date_str[:10]}_{date_str[11:13]}{date_str[14:16]}{date_str[17:19]}"
+    return stamp if re.fullmatch(r"\d{4}-\d{2}-\d{2}_\d{6}", stamp) else ""
+
+
+def find_staged_attachments(stamp: str, staging_dir: Path) -> list[str]:
+    """Names of staged attachments belonging to the email with this receive-second.
+
+    Prefix-matched via iterdir() rather than glob(): attachment names routinely
+    contain glob metacharacters (Outlook suffixes duplicates as `[1]`), which
+    glob would read as a character class and silently fail to match.
+    """
+    if not stamp or not staging_dir.exists():
+        return []
+    prefix = f"{stamp}-"
+    return sorted(
+        f.name for f in staging_dir.iterdir()
+        if f.is_file() and f.name.startswith(prefix)
+    )
+
+
 def parse_email_headers(filepath: Path, preread_lines: list[str] | None = None) -> dict | None:
     """Parse Power Automate email headers. Returns dict or None if not an email.
 
@@ -304,6 +336,7 @@ def parse_email_headers(filepath: Path, preread_lines: list[str] | None = None) 
         "subject": subject,
         "normalized_subject": normalized,
         "date": date_parsed,
+        "attachment_stamp": attachment_stamp(date_str),
         "conversation_id": headers.get("ConversationId", "").strip() or None,
         "category": headers.get("Category", "").strip() or None,
         "direction": direction,
@@ -1207,6 +1240,13 @@ def generate_email_frontmatter(email_meta: dict) -> dict:
 
     fm["source-file"] = email_meta.get("filename", "")
 
+    # Attachments live as raw files under _attachments/email/<stamp>/; the note
+    # links them rather than inlining their content (originals policy).
+    stamp = email_meta.get("attachment_stamp", "")
+    names = email_meta.get("attachments", [])
+    if stamp and names:
+        fm["attachments"] = [f"[[email/{stamp}/{n}]]" for n in names]
+
     return fm
 
 
@@ -1498,6 +1538,9 @@ def main():
 
     vault = Path(args.vault)
     inbox = Path(args.staging_dir) if args.staging_dir else vault / "00-Inbox"
+    # Always the real inbox, never _processing: Pull-Emails.ps1 stages attachments
+    # here and they are matched by name, not moved through the resume flow.
+    attach_staging = vault / "00-Inbox" / "_email-attachments"
 
     # Resume check: if _processing/ exists and has files, use that
     processing_dir = vault / "00-Inbox" / "_processing"
@@ -1607,6 +1650,9 @@ def main():
             result["meeting_preps"].append(prep_entry)
         elif file_type == "email":
             if metadata:
+                metadata["attachments"] = find_staged_attachments(
+                    metadata.get("attachment_stamp", ""), attach_staging
+                )
                 # Add pre-classification
                 relevance, reason = pre_classify(metadata)
                 metadata["pre_relevance"] = relevance
@@ -2124,6 +2170,22 @@ def main():
     total = sum(v for k, v in counts.items() if k not in ("skipped", "skipped_transcripts", "definitive_lows"))
     total += len(result["definitive_lows"])  # Count definitive lows in total (they're real files)
     print(f"Classified {total} files: {counts}", file=sys.stderr)
+
+    # Staged attachments nobody claimed. Only an email that produces a note moves
+    # them out, so without this they accumulate in _email-attachments/ unseen: no
+    # note links them and no error is raised. Usually means the email is still
+    # deferred (not settled) and will claim it next run, or the file predates the
+    # flow's stamped-naming convention and carries no stamp prefix at all.
+    #
+    # definitive_lows are deliberately NOT counted as claimants: a LOW email gets
+    # no note, so finalize never moves its attachment and the file really does
+    # pile up. Muting it here would hide exactly the case this warning is for.
+    if attach_staging.exists():
+        claimed = {n for e in result["email_manifest"] for n in e.get("attachments", [])}
+        orphans = sorted(f.name for f in attach_staging.iterdir()
+                         if f.is_file() and f.name not in claimed)
+        for o in orphans:
+            print(f"Warning: staged attachment matches no email: {o}", file=sys.stderr)
 
     # Backlog detection: either >20 emails OR the processable content spans >4 days.
     # The second clause catches vacation-return cases where file count is modest
