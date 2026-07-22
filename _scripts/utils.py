@@ -221,6 +221,11 @@ OWNER_EMAILS = OWNER_PERSONAL_EMAILS | OWNER_WORK_EMAILS
 LOCAL_TZ = "America/New_York"
 # <<< OWNER CONFIG <<<
 
+# Recorders often write the owner's own attendee entry as a bare name token
+# rather than an email address. Derived from the config above so /w-setup
+# regenerating the identity keeps this correct.
+OWNER_CONFIG_USER_NAMES = {OWNER_SLUG.lower(), OWNER_NAME.lower()}
+
 PROTECTING_VIP_TIERS = {"boss-chain", "stakeholder"}
 
 _TASK_OPEN_RE = re.compile(r'^(\s*)([-*])\s*\[([ />!])\]\s*(.*)$')

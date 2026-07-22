@@ -29,7 +29,8 @@ from utils import (REPLY_PREFIXES, normalize_subject, subject_to_slug,
                    generate_pii_token, ensure_utf8_stdio, atomic_json_write,
                    atomic_text_write, apply_vip_boost, recipient_set,
                    is_promotable_attachment, strip_attachment_prefix,
-                   OWNER_SLUG, OWNER_PERSONAL_EMAILS, LOCAL_TZ)
+                   OWNER_SLUG, OWNER_CONFIG_USER_NAMES,
+                   OWNER_PERSONAL_EMAILS, LOCAL_TZ)
 
 
 # ---------------------------------------------------------------------------
@@ -1081,7 +1082,16 @@ def resolve_transcript_attendees(transcript_meta: dict, lookup: dict) -> None:
         return
 
     addrs = [a.strip() for a in attendees_str.split(";") if a.strip()]
-    resolved = [resolve_email_addr(a, lookup) for a in addrs]
+    resolved = []
+    for a in addrs:
+        # The recorder emits the owner as a bare name token with no "@". It is
+        # not in the email-keyed lookup, so without this it falls through to the
+        # email guesser, which only capitalizes the first char of a hyphenated
+        # token and produces a miscased, unresolved wikilink.
+        if "@" not in a and a.lower() in OWNER_CONFIG_USER_NAMES:
+            resolved.append({"wikilink": f"[[{OWNER_SLUG}]]", "resolved": True})
+        else:
+            resolved.append(resolve_email_addr(a, lookup))
     transcript_meta["resolved_attendees"] = resolved
 
     vip_tiers = set()
@@ -1299,9 +1309,9 @@ def generate_transcript_frontmatter(transcript_meta: dict) -> dict:
     """Generate complete transcript frontmatter dict from pre-resolved metadata."""
     meeting_type = transcript_meta.get("meeting_type", "general")
 
-    # Determine if 1on1: exactly 2 resolved attendees (one is Sam)
+    # Determine if 1on1: exactly 2 resolved attendees (one is the owner)
     resolved = transcript_meta.get("resolved_attendees", [])
-    owner_links = {"[[Sam-Rivera]]"}
+    owner_links = {f"[[{OWNER_SLUG}]]"}
     non_owner = [r for r in resolved if r.get("wikilink") not in owner_links]
     is_1on1 = len(non_owner) == 1 and len(resolved) <= 3  # Allow some tolerance
 

@@ -194,3 +194,35 @@ def test_promote_email_attachments_empty_when_no_promotables(tmp_path):
     kept = [{"output_filename": "e.md", "date": "2026-01-20",
              "attachments": ["logo.png", "cal.ics", "smime.p7s"]}]
     assert ci.promote_email_attachments(kept, tmp_path) == []
+
+
+# --- owner name token in transcript attendees -------------------------------
+# Recorders write the owner's own attendee entry as a bare name token with no
+# "@". It is absent from the email-keyed lookup, so without a short-circuit it
+# falls to the email guesser, which only capitalizes the first character of a
+# hyphenated token and yields a miscased, unresolved wikilink. That then queues
+# a person stub the case-collision guard has to block on every run.
+
+def _attendees(attendees_str):
+    meta = {"attendees": attendees_str}
+    ci.resolve_transcript_attendees(meta, {})
+    return meta
+
+
+def test_owner_slug_token_resolves_without_guessing():
+    meta = _attendees(ci.OWNER_SLUG)
+    assert meta["resolved_attendees"] == [
+        {"wikilink": f"[[{ci.OWNER_SLUG}]]", "resolved": True}]
+    assert meta["unresolved_entities"] == []
+
+
+def test_owner_name_token_is_case_insensitive():
+    from utils import OWNER_NAME
+    meta = _attendees(OWNER_NAME.upper())
+    assert meta["resolved_attendees"][0]["wikilink"] == f"[[{ci.OWNER_SLUG}]]"
+
+
+def test_non_owner_bare_token_still_goes_through_the_guesser():
+    """The short-circuit must be narrow: anyone else keeps the normal path."""
+    meta = _attendees("Some-Other-Person")
+    assert meta["resolved_attendees"][0]["wikilink"] != f"[[{ci.OWNER_SLUG}]]"
