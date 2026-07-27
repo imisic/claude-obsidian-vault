@@ -1,5 +1,6 @@
 ---
 name: review-agent
+effort: xhigh
 description: Analyze vault activity over a period and generate structured review content. Use when w-review needs synthesis of interactions, actions, OKRs.
 model: claude-opus-4-6
 context: fork

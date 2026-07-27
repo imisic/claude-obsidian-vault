@@ -1,5 +1,6 @@
 ---
 name: w-task-audit
+effort: xhigh
 description: Audit and clean up action items across interaction notes. Fixes missing delegated-by tags, removes noise tasks from group meetings, and reports task health.
 user-invocable: true
 argument-hint: "[--fix]"

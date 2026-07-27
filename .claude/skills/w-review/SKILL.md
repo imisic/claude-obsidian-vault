@@ -1,5 +1,6 @@
 ---
 name: w-review
+effort: xhigh
 description: Unified review command for weekly, monthly, or custom period reviews. Analyzes vault activity and generates structured review notes.
 user-invocable: true
 argument-hint: "[weekly|monthly|monthly 2026-02|last N days|YYYY-MM-DD:YYYY-MM-DD|project:Name last 2 weeks]"
