@@ -381,6 +381,26 @@ def rewrite_screenshot_wikilinks(body: str, basenames: list, stem: str) -> str:
     return body
 
 
+def rewrite_self_wikilinks(body: str, old_stem: str, new_stem: str) -> str:
+    """Repoint a note's self-references after its destination filename changed.
+
+    Agents are told to emit `[source:: [[<own filename>]]]` using the filename the
+    manifest assigned, and (for meetings) to correct `meeting-type` while KEEPING
+    that filename so the pipeline can rename. `corrected_meeting_filename` then
+    renames the file, and `resolve_collision` may add a `-N` suffix on top, but the
+    body still cites the pre-rename stem: a link to a note that no longer exists,
+    or (worse, when the old stem is a real note) a silent misattribution that
+    resolves to the wrong note and so never shows up as a broken link.
+
+    Matches the wikilink target, not the `[source::` field, so aliased forms and
+    any other field citing the stem are repointed too. Alias text is preserved.
+    """
+    if not body or not old_stem or old_stem == new_stem:
+        return body
+    pattern = re.compile(r"\[\[" + re.escape(old_stem) + r"(\|[^\[\]]*)?\]\]")
+    return pattern.sub(lambda m: f"[[{new_stem}{m.group(1) or ''}]]", body)
+
+
 def apply_task_hygiene_to_body(body: str, fm: dict, vip_slugs: set) -> str:
     """Run apply_task_hygiene (VIP-aware, size-based; stamps [created::]) over
     each body line."""
@@ -687,6 +707,9 @@ def main():
             stem = Path(exp["source"]).stem
             basenames = [s.get("basename") for s in exp["screenshots"] if s.get("basename")]
             body = rewrite_screenshot_wikilinks(body, basenames, stem)
+        # Anchored to final_path, not final_name: resolve_collision may have added a
+        # -N suffix after the rename, and citing final_name would desync again.
+        body = rewrite_self_wikilinks(body, Path(ofn).stem, final_path.stem)
         body = apply_task_hygiene_to_body(body, fm, vip_slugs)
 
         try:

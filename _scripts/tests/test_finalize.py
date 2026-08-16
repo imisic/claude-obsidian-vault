@@ -306,6 +306,104 @@ def test_meeting_type_matching_filename_not_renamed(tmp_path):
     assert result["renamed"] == []
 
 
+# ---------- a rename repoints the note's own [source::] self-references ----------
+#
+# Agents cite their own assigned filename in [source:: [[...]]] while correcting
+# meeting-type, so a rename used to strand every action's backlink. Daily-note
+# Action items are re-read from these fields, so the stale stem propagated into
+# the briefings too, and the two sections disagreed about the same meeting.
+
+MEETING_NOTE_WITH_ACTIONS = """---
+date: 2026-07-06
+type: meeting
+interaction-type: meeting
+meeting-type: {mtype}
+summary: A meeting summary line
+attendees:
+  - "[[Sam-Rivera]]"
+source-file: {source}
+---
+
+Discussed things.
+
+## Actions
+
+- [ ] [[Sam-Rivera]] send the deck [source:: [[{selfref}]]]
+- [ ] [[Sam-Rivera]] book the room [source:: [[{selfref}|Source]]]
+"""
+
+
+def _stage_meeting_actions(vault, assigned, mtype, selfref, src_name="transcript-x.txt"):
+    (vault / "00-Inbox" / "_processing" / src_name).write_text("raw", encoding="utf-8")
+    _write_manifest(vault, transcripts=[
+        {"file": f"00-Inbox/_processing/{src_name}", "output_filename": assigned}])
+    (vault / "_db" / "staged-notes" / assigned).write_text(
+        MEETING_NOTE_WITH_ACTIONS.format(mtype=mtype, source=src_name, selfref=selfref),
+        encoding="utf-8")
+
+
+def test_rename_repoints_self_source_refs(tmp_path):
+    """The observed failure shape: assigned name says 1on1, frontmatter says
+    general, body cites the 1on1 stem."""
+    _scaffold(tmp_path)
+    _stage_meeting_actions(tmp_path, "2026-07-06-1on1-halftime-review.md", "general",
+                           selfref="2026-07-06-1on1-halftime-review")
+
+    _run(tmp_path)
+
+    written = (tmp_path / "05-Interactions" / "2026"
+               / "2026-07-06-general-halftime-review.md").read_text(encoding="utf-8")
+    assert "[[2026-07-06-general-halftime-review]]" in written
+    assert "2026-07-06-1on1-halftime-review" not in written
+    # the aliased form is repointed too, and keeps its alias
+    assert "[[2026-07-06-general-halftime-review|Source]]" in written
+
+
+def test_rename_repoints_self_refs_to_collision_suffixed_name(tmp_path):
+    """Anchoring to final_name instead of final_path would leave refs citing the
+    unsuffixed stem, which resolves to the OTHER note: a silent misattribution
+    rather than a broken link."""
+    _scaffold(tmp_path)
+    (tmp_path / "05-Interactions" / "2026").mkdir(parents=True)
+    (tmp_path / "05-Interactions" / "2026" / "2026-07-06-general-halftime-review.md").write_text(
+        "PRE-EXISTING", encoding="utf-8")
+    _stage_meeting_actions(tmp_path, "2026-07-06-1on1-halftime-review.md", "general",
+                           selfref="2026-07-06-1on1-halftime-review")
+
+    _run(tmp_path)
+
+    written = (tmp_path / "05-Interactions" / "2026"
+               / "2026-07-06-general-halftime-review-2.md").read_text(encoding="utf-8")
+    assert "[[2026-07-06-general-halftime-review-2]]" in written
+    assert "[[2026-07-06-general-halftime-review]]" not in written
+
+
+def test_no_rename_leaves_source_refs_untouched(tmp_path):
+    _scaffold(tmp_path)
+    _stage_meeting_actions(tmp_path, "2026-07-06-1on1-halftime-review.md", "1on1",
+                           selfref="2026-07-06-1on1-halftime-review")
+
+    _run(tmp_path)
+
+    written = (tmp_path / "05-Interactions" / "2026"
+               / "2026-07-06-1on1-halftime-review.md").read_text(encoding="utf-8")
+    assert written.count("[[2026-07-06-1on1-halftime-review") == 2
+
+
+def test_rename_leaves_refs_to_other_notes_alone(tmp_path):
+    """Only the note's own stale stem is repointed; genuine cross-references to
+    other notes must survive a rename untouched."""
+    _scaffold(tmp_path)
+    _stage_meeting_actions(tmp_path, "2026-07-06-1on1-halftime-review.md", "general",
+                           selfref="2026-05-02-general-some-other-meeting")
+
+    _run(tmp_path)
+
+    written = (tmp_path / "05-Interactions" / "2026"
+               / "2026-07-06-general-halftime-review.md").read_text(encoding="utf-8")
+    assert "[[2026-05-02-general-some-other-meeting]]" in written
+
+
 # ---------- manifest-driven skip lists ----------
 
 def test_pre_skipped_deleted_and_logged(tmp_path):
