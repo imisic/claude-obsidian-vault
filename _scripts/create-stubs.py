@@ -19,6 +19,7 @@ import json
 import os
 import re
 import sys
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -58,6 +59,7 @@ role: ""
 email: "{email}"
 type: person
 status: stub
+created: {created}
 ---
 
 # {name}
@@ -340,6 +342,9 @@ def main():
                 name=name,
                 company=company,
                 email=email_addr,
+                # Stub age is measured from this, not mtime, so a later edit
+                # cannot silently reset the staleness clock.
+                created=date.today().isoformat(),
             ).lstrip("\n")
 
             stub_path = people_dir / f"{filename}.md"

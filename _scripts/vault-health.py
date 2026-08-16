@@ -17,7 +17,8 @@ Checks:
   - Unresolved entities (notes create-stubs.py could not place a name for)
 
 Usage:
-    python3 vault-health.py [--vault PATH] [--stale-stub-days 14]
+    python3 vault-health.py [--vault PATH] [--stale-stub-days 90]
+                            [--orphan-grace-days 14]
                             [--archive-quarters 2] [--json]
 """
 
@@ -29,6 +30,10 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 FM_DATE_RE = re.compile(r"^date:\s*(\d{4}-\d{2}-\d{2})", re.M)
+# Stub age is measured from `created:`, falling back to mtime only when absent.
+# mtime alone made the metric lie: any touch (a company backfill, a bulk relink)
+# reset a stub's clock, so routine maintenance silently emptied this report.
+FM_CREATED_RE = re.compile(r"^created:\s*(\d{4}-\d{2}-\d{2})", re.M)
 FM_STATUS_RE = re.compile(r"^status:\s*(\S+)", re.M)
 WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 UNRESOLVED_HDR_RE = re.compile(r"^unresolved-entities:(.*)$", re.M)
@@ -98,6 +103,21 @@ def _unresolved_slugs(fm):
     return [s for s in out if s]
 
 
+CODE_FENCE_RE = re.compile(r"^```.*?^```", re.S | re.M)
+CODE_SPAN_RE = re.compile(r"`[^`\n]*`")
+
+
+def _strip_code(content):
+    """Blank out fenced blocks and inline code before link extraction.
+
+    A `[[Name]]` inside backticks is documentation about wikilinks, not a link.
+    Counting it cuts both ways: it invents broken links (a doc explaining Obsidian
+    autocomplete produces half-typed targets), and it inflates inbound counts,
+    which can mask a genuinely orphaned note.
+    """
+    return CODE_SPAN_RE.sub(" ", CODE_FENCE_RE.sub(" ", content))
+
+
 def _walk_content_notes(vault):
     """Read every content note once; return the data the coherence checks need."""
     notes = []
@@ -111,7 +131,7 @@ def _walk_content_notes(vault):
             except OSError:
                 continue
             fm = _frontmatter(content)
-            links = {_link_slug(m.group(1)) for m in WIKILINK_RE.finditer(content)}
+            links = {_link_slug(m.group(1)) for m in WIKILINK_RE.finditer(_strip_code(content))}
             links = {s for s in links  # drop embeds and punctuation-only ([[...]])
                      if s and not EXT_RE.search(s) and any(c.isalnum() for c in s)}
             links.discard(p.stem)  # a note linking itself is not a cross-reference
@@ -177,6 +197,12 @@ def orphaned_entities(notes, today, min_age_days):
     for n in notes:
         if n["dir"] not in ENTITY_DIRS or inbound.get(n["stem"].lower(), 0):
             continue
+        # 04-People/_archived/ is where a dormant person is PUT once nobody links
+        # them (create-stubs.py resurrects them on reappearance). Flagging them as
+        # orphans re-reports the fixed state forever. They stay in `notes` so links
+        # to and from them still resolve.
+        if "_archived" in Path(n["path"]).parts:
+            continue
         d = _parse_date(n["date"] or "")
         if d and (today - d).days < min_age_days:
             continue  # a just-created note has not had time to be linked yet
@@ -224,9 +250,9 @@ def stale_stubs(vault, today, stale_days):
         sm = FM_STATUS_RE.search(fm)
         if not sm or sm.group(1) != "stub":
             continue
-        dm = FM_DATE_RE.search(fm)
+        dm = FM_CREATED_RE.search(fm) or FM_DATE_RE.search(fm)
         d = _parse_date(dm.group(1)) if dm else None
-        if d is None:  # no date in frontmatter, fall back to file mtime
+        if d is None:  # no created/date in frontmatter, fall back to file mtime
             d = date.fromtimestamp(p.stat().st_mtime)
         if (today - d).days >= stale_days:
             out.append({"name": p.stem, "since": d.isoformat(),
@@ -328,8 +354,16 @@ def main():
     parser = argparse.ArgumentParser(description="Detect-only vault maintenance report")
     parser.add_argument("--vault", default=str(Path(__file__).resolve().parent.parent),
                         help="Vault root directory")
-    parser.add_argument("--stale-stub-days", type=int, default=14,
-                        help="Flag person stubs older than this many days (default: 14)")
+    # 90, not 14: in an auto-populated vault most person notes are thin by
+    # default, so a 14-day window flags a large share of them and the report reads
+    # as a nag rather than a work queue. This is the "enrich me" horizon.
+    parser.add_argument("--stale-stub-days", type=int, default=90,
+                        help="Flag person stubs older than this many days (default: 90)")
+    # Separate knob: how long a new entity note gets to acquire inbound links
+    # before counting as an orphan. Previously reused --stale-stub-days, which
+    # coupled two unrelated horizons (raising one silently loosened the other).
+    parser.add_argument("--orphan-grace-days", type=int, default=14,
+                        help="Ignore entity notes younger than this when flagging orphans (default: 14)")
     parser.add_argument("--archive-quarters", type=int, default=2,
                         help="Flag interactions older than this many quarters (default: 2)")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
@@ -346,7 +380,7 @@ def main():
     notes = _walk_content_notes(vault)
     known = {n["stem"].lower() for n in notes} | _registry_slugs(vault)
     broken = broken_wikilinks(notes, known)
-    orphans = orphaned_entities(notes, today, args.stale_stub_days)
+    orphans = orphaned_entities(notes, today, args.orphan_grace_days)
     unresolved = unresolved_entity_notes(notes)
 
     if args.json:
