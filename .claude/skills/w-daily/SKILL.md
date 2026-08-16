@@ -11,6 +11,14 @@ argument-hint: "[YYYY-MM-DD]"
 
 Architecture: scripts orchestrate, models only produce content. Note-writing agents emit finished markdown notes into `_db/staged-notes/` (never JSON envelopes); `finalize.py` does all bookkeeping (validation, hygiene, moves, logs, indexes); briefings always rebuild from the notes on disk, so a rerun can never clobber a past day. Headless-ready: every step below is a script call or a standard Agent dispatch; an unattended run uses the default sign-off in Step 4.
 
+**Procedures live in `references/`, not in the always-on rules.** Read the one you need, when you need it, rather than up front:
+
+- `references/ingestion.md` - conversion tools, content detection, routing, logging, file naming, note frontmatter.
+- `references/ingestion-email.md` - email pulling, Power Automate format, parsing, email frontmatter, VIP handling.
+- `references/email-preprocessing.md` - body cleaning, dedupe, relevance scoring, thread context.
+
+A normal run driven by the scripts needs none of them. Reach for one when handling something inline, when a script reports an unexpected shape, or when changing how a content type is processed.
+
 **Main-context rules:** never read `_db/entity-registry.json`, `_db/email-lookup.json`, or raw sources. Email bodies come pre-cleaned and PII-sanitized as `cleaned_body` in the manifest; transcripts are dispatched to agents. Read `_db/manifest.json` only via targeted `jq` slices.
 
 ## Step 1: Prepare
@@ -50,7 +58,7 @@ Read the template file once per run; append each slice. Agents return `NOTE: <st
 
 **Docs:** ≤3 → inline (apply `prompts/doc-note.md` yourself, converting per its rules). More → one agent with doc-note.md + slices.
 
-**Manual notes / manual meetings / meeting preps** (`classify.counts` shows them; rare): handle inline per `.claude/rules/ingestion.md` (merge manual notes into their daily note; clean manual meetings and Write them directly to `05-Interactions/YYYY/`; merge or discard prep notes). Collect their log entries for `--extra-log` below.
+**Manual notes / manual meetings / meeting preps** (`classify.counts` shows them; rare): handle inline per `references/ingestion.md` (merge manual notes into their daily note; clean manual meetings and Write them directly to `05-Interactions/YYYY/`; merge or discard prep notes). Collect their log entries for `--extra-log` below.
 
 ## Step 3: Finalize
 

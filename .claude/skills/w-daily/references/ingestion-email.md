@@ -48,7 +48,7 @@ Correlation (`classify-inbox.py`):
 - `/w-daily` does NOT pull emails. It only processes what's already in `00-Inbox/`
 
 ### Email preprocessing
-Apply the full pipeline from `.claude/rules/email-preprocessing.md`:
+Apply the full pipeline from `references/email-preprocessing.md`:
 1. Clean body (strip Teams footers, disclaimers, signatures, safe links)
 2. Detect duplicates (skip if duplicate found)
 3. Score relevance (HIGH / MEDIUM / LOW)

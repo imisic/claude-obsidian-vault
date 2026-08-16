@@ -149,13 +149,21 @@ All in `.claude/rules/` (auto-loaded into context).
 
 | Rule file                 | What it defines                                                                                                                                                   | Used by                                        |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `ingestion.md`            | Content type detection, routing, meeting/reference frontmatter, file naming, originals policy, manual note processing, logging                                    | w-daily, note-writing agents                   |
-| `ingestion-email.md`      | Email pulling, Power Automate format, email parsing rules, email frontmatter schema, tiered routing                                                               | classify-inbox.py, w-daily                     |
-| `email-preprocessing.md`  | Body cleaning (Teams footers, disclaimers, safe links), duplicate detection, relevance scoring (HIGH/MEDIUM/LOW waterfall), thread identification + consolidation | classify-inbox.py, email-note.md               |
-| `entity-matching.md`      | Name/email → wikilink resolution, registry schema, domain → company mapping, Sam detection, stub creation threshold, recipient parsing                           | classify-inbox.py, note-writing agents         |
+| `ingestion.md`            | Pointer rule: `/w-daily` is the single ingestion entry point, and the three long procedures below must be read on demand before touching `00-Inbox/` content       | w-daily                                        |
+| `entity-matching.md`      | Name/email → wikilink resolution, registry schema, domain → company mapping, owner detection, stub creation threshold, recipient parsing                          | classify-inbox.py, create-stubs.py             |
 | `vip.md`                  | VIP tier definitions (boss-chain/stakeholder/team), relevance boost rules, frontmatter tags, briefing markers                                                     | classify-inbox.py, note-writing agents, w-daily |
 | `obsidian-conventions.md` | Vault structure, frontmatter formats, action item rules (single source of truth), linking conventions, periodic note formats, archive policy                      | All skills                                     |
 | `verification.md`         | Anti-fabrication, no-false-absence, and verify-don't-trust rules for entity matching, extraction, and synthesis. Distilled into each note-writing prompt template's "No fabrication" section (agents do not read rules at runtime); referenced by the synthesis skills | Note-writing agents, review-agent, 1on1-prep, w-project-status |
+
+### Lazy-loaded ingestion references
+
+These are NOT rules and are NOT auto-loaded. They live in `.claude/skills/w-daily/references/` and are read on demand, as `.claude/rules/ingestion.md` instructs. Together they are roughly 590 lines that a normal script-driven run never needs.
+
+| Reference file            | What it defines                                                                                                                                                   | Used by                                        |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `ingestion.md`            | Content type detection, routing, meeting/reference frontmatter, file naming, originals policy, manual note processing, logging                                    | classify-inbox.py, finalize.py, w-daily        |
+| `ingestion-email.md`      | Email pulling, Power Automate format, email parsing rules, email frontmatter schema, tiered routing                                                               | classify-inbox.py, w-daily                     |
+| `email-preprocessing.md`  | Body cleaning (Teams footers, disclaimers, safe links), duplicate detection, relevance scoring (HIGH/MEDIUM/LOW waterfall), thread identification + consolidation | classify-inbox.py, email-note.md               |
 
 ---
 

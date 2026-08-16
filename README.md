@@ -164,7 +164,7 @@ Anything: copy-pasted notes, downloaded files, saved emails, transcripts, PDFs, 
 - Markdown notes → merged into the daily note or routed as meeting notes
 - Anything else → a reference note (the catch-all)
 
-You don't need to pre-create subfolders. For an unusual file type or custom routing, just ask Claude to extend the detection rules in `.claude/rules/ingestion.md`.
+You don't need to pre-create subfolders. For an unusual file type or custom routing, just ask Claude to extend the detection rules in `.claude/skills/w-daily/references/ingestion.md`.
 
 ## Expect to tune it
 

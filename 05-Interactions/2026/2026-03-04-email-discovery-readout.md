@@ -18,7 +18,7 @@ source-file: 2026-03-04-discovery-readout.txt
 
 # Email: Orion pilot discovery readout, 2026-03-04
 
-> [!example] Example **MEDIUM**-relevance email note (condensed: frontmatter + 1-line summary + thread context, no full body, that's the tiered routing in `email-preprocessing.md`). Fictional demo data. Replace or delete. See README → "Example content".
+> [!example] Example **MEDIUM**-relevance email note (condensed: frontmatter + 1-line summary + thread context, no full body, that's the tiered routing in `w-daily/references/email-preprocessing.md`). Fictional demo data. Replace or delete. See README → "Example content".
 
 ## Summary
 [[Mia-Fischer]] reports 3 of 5 pilot targets are warm; 2 need a personal nudge from [[Sam-Rivera]].
