@@ -49,7 +49,7 @@ No new sections. Prefix markers on existing lines:
 | | Topic | Summary | Source |
 |-|-------|---------|--------|
 | **!** | Subject | Boss flagged issue... | [[...]] |
-| * | Subject | Julia shared plan... | [[...]] |
+| * | Subject | Elena shared plan... | [[...]] |
 | | Subject | Regular update... | [[...]] |
 ```
 - `**!**` = boss-chain involved
