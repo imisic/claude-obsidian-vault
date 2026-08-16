@@ -30,7 +30,7 @@ Capture the JSON output. This is all the structured data the agent needs, includ
 
 ## Phase 1: Invoke 1on1-prep agent (pin to Opus)
 
-Dispatch 1on1-prep as a `general-purpose` Agent with **`model: "opus"`** set explicitly on the Agent call, then have it invoke the `1on1-prep` skill via the Skill tool. The skill's frontmatter `model:` is NOT honored under `subagent_type: "general-purpose"` dispatch (see the "Model selection" note in `w-daily/SKILL.md`), so without the explicit parameter this prep silently inherits the session model instead of Opus.
+Dispatch 1on1-prep as a `general-purpose` Agent with **`model: "opus"`** set explicitly on the Agent call, then have it invoke the `1on1-prep` skill via the Skill tool. The skill's frontmatter `model:` is NOT honored under `subagent_type: "general-purpose"` dispatch, so without the explicit parameter this prep silently inherits the session model instead of Opus.
 
 Pass the JSON output from prep-1on1-data.py to the agent as context.
 The agent should NOT search for interactions or grep for action items: all structured data is in the JSON.

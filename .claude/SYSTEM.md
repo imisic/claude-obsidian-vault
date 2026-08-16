@@ -332,7 +332,7 @@ calendar, dataview, obsidian-tasks-plugin, omnisearch, quickadd, templater-obsid
 The pipeline ingests meeting transcripts from any source that drops a file into `00-Inbox/`. A transcript is first-class when it has:
 
 1. **A structured header** (`MeetingSubject:`, `MeetingDate:`, `Attendees:`, `MeetingType:`, `RecordingDuration:` in the first few lines): `classify-inbox.py` reads this directly and routes it to a note-writing agent (`prompts/transcript-note.md`) with pre-populated metadata, no re-detection needed.
-2. **Timestamped speaker lines** (e.g. `[0:05:23] Sam: ...`): the `transcript-note.md` template resolves speakers per `speaker-resolution.md`.
+2. **Timestamped speaker lines** (e.g. `[0:05:23] Sam: ...`): the `transcript-note.md` template resolves speakers per its own speaker-resolution section, which follows `.claude/rules/entity-matching.md` step 2 (`speakers_map` labels) and step 7 (participant cross-reference).
 
 Bring your own recorder or transcription tool to produce that format. Generic transcripts (timestamps + speaker labels, no structured header) are also detected and processed. Plaud NotePin is supported out of the box (see below).
 

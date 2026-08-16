@@ -82,6 +82,8 @@ Omit fields that don't apply. Running headless: skip this step (briefe uses the 
 python _scripts/briefe.py --vault "." --target-date "$TARGET_DATE" --touched <d1> <d2> ... --overrides _db/briefing-overrides.json
 ```
 
+Pass finalize's `touched_dates[]` verbatim after `--touched` (space-separated, or one `--touched` per date; both parse). Omit the flag entirely when `touched_dates[]` is empty.
+
 Runs the Capture routing for TARGET_DATE, then rebuilds each date's briefing block from the notes on disk. Existing `## Attention needed` bullets and custom sign-offs on other dates are preserved automatically. Validate `errors[]` is empty.
 
 ## Step 6: Commit and push

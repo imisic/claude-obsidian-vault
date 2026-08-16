@@ -17,6 +17,8 @@ Usage:
     python3 briefe.py --target-date YYYY-MM-DD [--vault PATH]
                       [--touched YYYY-MM-DD ...] [--overrides FILE]
 
+    --touched takes either form: `--touched D1 D2` or `--touched D1 --touched D2`.
+
 Overrides file (JSON), authoritative per-date when present:
     {"2026-07-06": {"sign_off": "line", "attention_needed": ["b1", "b2"]}}
 
@@ -154,7 +156,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Rebuild daily briefings from notes on disk")
     ap.add_argument("--vault", default=".")
     ap.add_argument("--target-date", required=True, help="Today's date (YYYY-MM-DD)")
-    ap.add_argument("--touched", action="append", help="Extra date to rebuild; repeatable")
+    # extend+nargs accepts both `--touched A B` and `--touched A --touched B`: the
+    # caller is an LLM reading SKILL.md, and a form mismatch used to abort the whole
+    # briefing step on an argparse error.
+    ap.add_argument("--touched", action="extend", nargs="+",
+                    help="Extra date(s) to rebuild; repeatable and space-separated")
     ap.add_argument("--overrides", default=None, help="JSON: {date: {sign_off, attention_needed}}")
     args = ap.parse_args()
 

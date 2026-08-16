@@ -1,6 +1,6 @@
 ---
 name: review-agent
-effort: xhigh
+effort: high
 description: Analyze vault activity over a period and generate structured review content. Use when w-review needs synthesis of interactions, actions, OKRs.
 model: claude-opus-4-6
 context: fork
@@ -112,7 +112,7 @@ Group by owner if the list has more than 10 items. Otherwise flat list, sorted b
 - Carry-forward items for next month
 - Leadership summary block (3-5 bullets)
 
-- Open or close the review with a wry 1-line observation about the period. See `CLAUDE.md` "Vault prose voice" for tone guidelines.
+- Open or close the review with a wry 1-line observation about the period. Tone: dry, wry, one line max, never forced; skip it when the period was routine.
 
 ## Return format
 

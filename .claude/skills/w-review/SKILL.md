@@ -1,6 +1,6 @@
 ---
 name: w-review
-effort: xhigh
+effort: high
 description: Unified review command for weekly, monthly, or custom period reviews. Analyzes vault activity and generates structured review notes.
 user-invocable: true
 argument-hint: "[weekly|monthly|monthly 2026-02|last N days|YYYY-MM-DD:YYYY-MM-DD|project:Name last 2 weeks]"
@@ -30,7 +30,7 @@ Run `python _scripts/build-open-actions.py` to ensure `_db/open-actions.json` ha
 
 ## Step 2: Invoke review-agent (pin to Opus)
 
-Dispatch review-agent as a `general-purpose` Agent with **`model: "opus"`** set explicitly on the Agent call, then have it invoke the `review-agent` skill via the Skill tool. The skill's frontmatter `model:` is NOT honored under `subagent_type: "general-purpose"` dispatch (see the "Model selection" note in `w-daily/SKILL.md`), so without the explicit parameter this synthesis silently inherits the session model instead of Opus. Pass the parsed parameters; the agent analyzes vault content and returns structured review content.
+Dispatch review-agent as a `general-purpose` Agent with **`model: "opus"`** set explicitly on the Agent call, then have it invoke the `review-agent` skill via the Skill tool. The skill's frontmatter `model:` is NOT honored under `subagent_type: "general-purpose"` dispatch, so without the explicit parameter this synthesis silently inherits the session model instead of Opus. Pass the parsed parameters; the agent analyzes vault content and returns structured review content.
 
 The review includes a `## Demoted last week` section listing tasks the forgettability filter auto-demoted during the period (read from `_db/open-actions.json` → `demoted_actions[]`). The section is omitted when empty.
 

@@ -43,7 +43,7 @@ period-end: YYYY-MM-DD
 - Tags hierarchy: #meeting/1on1 #meeting/steerco #meeting/sync #project/alpha
 
 ### Action items and tracking
-- **Single source of truth**: Action item checkboxes (`- [ ]`) live ONLY in interaction notes (05-Interactions/) and project files (03-Projects/). Never duplicate checkboxes in daily notes.
+- **Single source of truth**: Action item checkboxes (`- [ ]`) live ONLY in interaction notes (05-Interactions/), project files (03-Projects/), and the 07-Areas/06-Organization/ hub pages (Partners/, Products/). All three are indexed by `build-open-actions.py`, so a checkbox there is one task truth, not a silent second one. Never duplicate checkboxes in daily notes.
 - **Daily notes and reviews**: Reference actions as plain text with a link to the source: `- [[Owner-Name]] description → [[source-note|Source]]`. No checkboxes. This prevents double-counting in Dataview queries and split completion state. Same rule applies to weekly and monthly reviews.
 - **Interaction/project notes**: Use standard markdown checkboxes: `- [ ] [[Owner-Name]] description [due:: YYYY-MM-DD] [delegated-by:: [[Sam-Rivera]]] [source:: [[meeting-or-project]]] [created:: YYYY-MM-DD]`
 - **`[created::]` is stamped automatically** by `finalize.py` at ingestion (date copied from the note's `date:` frontmatter). For manually-authored tasks, add it yourself or let `/w-task-audit --fix --backfill-created` stamp it.
