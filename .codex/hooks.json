@@ -1,0 +1,17 @@
+{
+  "description": "Warn when a vault file Codex just wrote contains an HTML comment.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "^(apply_patch|Edit|Write|MultiEdit)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/check-html-comment.sh\"",
+            "statusMessage": "Checking for HTML comments"
+          }
+        ]
+      }
+    ]
+  }
+}

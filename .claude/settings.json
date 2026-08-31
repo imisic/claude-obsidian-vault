@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "grep -l '<!--' \"$CLAUDE_FILE_PATH\" && echo \"WARNING: HTML comment found in $CLAUDE_FILE_PATH\" || true"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-html-comment.sh\""
           }
         ]
       }
