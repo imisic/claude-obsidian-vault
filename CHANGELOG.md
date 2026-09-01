@@ -2,6 +2,20 @@
 
 Notable changes to this template. Versions follow [semantic versioning](https://semver.org/) and are tagged in git.
 
+## v2.3.0 (2026-09-01)
+
+A `project:` auditor, and model routing that stops rotting.
+
+### Added
+- `_scripts/audit-project-metadata.py`, a deterministic auditor for the `project:` frontmatter field on interaction notes. Nothing validated that field before: `entity-registry.json` holds people, not projects, so renaming a project left every note pointing at it silently broken, and neither `vault-health.py` (wikilink targets) nor `audit-link-casing.py` (casing) looks at frontmatter values. **It is useful with no configuration at all**, reporting any `project:` that does not resolve to a real `03-Projects/*.md` note. Filling in the `PROJECT SIGNAL CONFIG` block additionally backfills missing tags and flags misfiled notes.
+
+  The resolver scores signal **dominance** rather than keyword presence: distinct domain-anchor hits are weighed against hard and soft out-of-domain guards, so a note about your work that mentions another area once still resolves, while a note that is mostly about that other area is suppressed even though a domain word appears in it. A presence-based matcher gets both cases backwards. Notes matching three or more top-level areas are treated as cross-cutting and always flagged for a manual call. `--fix` applies `MISMATCH`, `MISSING-HIGH-CONFIDENCE` and `EMPTY/MALFORMED`; `UNCERTAIN` and `UNKNOWN-TARGET` are never written. It never creates a project note and never edits outside `05-Interactions/`.
+- 24 tests for the above, including a mutation check that the dominance rule is load-bearing (swapping it for presence matching fails the headline case).
+
+### Changed
+- Model routing uses floating aliases everywhere instead of pinned model IDs. Four skills shipped `model: claude-opus-4-6` in frontmatter, which a template cannot keep current: anyone cloning after that generation ships gets a pin at least one generation behind, with nothing to warn them. `w-project-status` and `w-prep` now carry `model: opus`, which follows whatever the current Opus is.
+- `review-agent` and `1on1-prep` lose their frontmatter `model:` entirely. Both are dispatched under `subagent_type: "general-purpose"`, which does not honor skill frontmatter, so the pin was inert while reading as though it were doing something. The live setting stays on the Agent call in `w-review` and `w-1on1`, where it already was.
+
 ## v2.2.0 (2026-08-16)
 
 Correctness fixes, a lighter always-on context, and a test suite worth the name.
