@@ -1,7 +1,7 @@
 ---
 name: w-project-status
 description: Generate a status summary for a specific project or product. Aggregates recent interactions, decisions, actions, blockers, and OKR linkage.
-model: claude-opus-4-6
+model: opus
 user-invocable: true
 argument-hint: "[Project or Product Name]"
 allowed-tools: Read, Glob, Grep, Bash

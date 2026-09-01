@@ -1,7 +1,7 @@
 ---
 name: w-prep
 description: Prep brief for a meeting/conversation (forward) or a "what I did on a topic" recap for team-weekly reporting (retro), on a person and/or topic, across the vault plus any linked source-repo (e.g. project-repo).
-model: claude-opus-4-6
+model: opus
 user-invocable: true
 argument-hint: "<person and/or topic> [last week | last month]"
 allowed-tools: Read, Glob, Grep, Bash

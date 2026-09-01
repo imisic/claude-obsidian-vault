@@ -1,7 +1,6 @@
 ---
 name: 1on1-prep
 description: Prepare for a 1on1 meeting with a specific person. Synthesizes pre-built data into a meeting prep note.
-model: claude-opus-4-6
 context: fork
 user-invocable: false
 allowed-tools: Read, Write, Glob, Bash
