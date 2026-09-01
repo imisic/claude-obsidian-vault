@@ -41,5 +41,3 @@ March was the month [[Orion]] went from concept to a dated pilot. ~12 interactio
 - Orion DE pilot is scoped, sponsored, and dated; commercial terms with Northwind are signed.
 - Biggest risk is pilot demand, not delivery: pipeline is gated on the now-closed terms.
 - One ask outstanding: an extra engineer to de-risk the launch window.
-
-*A tidy month: every big decision actually got decided. The hard part (selling the pilot) starts now.*

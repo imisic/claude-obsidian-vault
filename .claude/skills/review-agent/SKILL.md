@@ -111,7 +111,7 @@ Group by owner if the list has more than 10 items. Otherwise flat list, sorted b
 - Carry-forward items for next month
 - Leadership summary block (3-5 bullets)
 
-- Open or close the review with a wry 1-line observation about the period. Tone: dry, wry, one line max, never forced; skip it when the period was routine.
+- End on the last fact, risk, or next action. No closing observation, no summary flourish.
 
 ## Return format
 

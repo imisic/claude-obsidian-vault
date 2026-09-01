@@ -46,7 +46,7 @@ The prep note has TWO zones separated by `---` dividers:
 - **Carry-forward section** (first subsection in prep zone): If `carry_forward` is non-empty, add `### Carry-forward from last 1on1` with these items as bullets. These are explicitly deferred topics from the previous meeting, they appear FIRST because they were intentionally postponed. If `carry_forward` is empty and a prior 1on1 exists (`meta.last_1on1` is set), note "No deferred topics from last meeting." If no prior 1on1 exists at all, omit this subsection entirely.
 - After carry-forward, new interactions since last 1on1, grouped into topic subsections as before.
 - Reference open actions as plain text (e.g., "Related open action: [[Owner]] description"), NOT as checkbox `- [ ]` items. These are references, not new tasks.
-- Optionally include a light sardonic observation at the end of the prep zone if context warrants it. Tone: dry, wry, one line max, never forced; skip it when the period was routine.
+- End the prep zone on the last item. No closing observation.
 
 **Meeting zone** (user fills in, carried forward):
 - `## Discussion`: user writes notes during the meeting

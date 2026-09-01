@@ -4,7 +4,7 @@
 
 ![Capture scattered emails, meetings, and documents into one inbox, then grow a connected second brain of people, projects, and reference notes.](assets/banner.webp)
 
-An Obsidian vault wired to [Claude Code](https://claude.com/claude-code) skills that automate a knowledge worker's working notes. Drop emails, meeting transcripts, and documents into a folder (`00-Inbox/`); the system classifies them, resolves people and projects to wikilinks, writes structured interaction notes, and generates a daily briefing. It also handles weekly/monthly reviews, 1on1 prep, and project status.
+An Obsidian vault wired to [Claude Code](https://claude.com/claude-code) skills that write and file your work notes for you. Drop emails, meeting transcripts, and documents into a folder (`00-Inbox/`); the system classifies them, resolves people and projects to wikilinks, writes structured interaction notes, and generates a daily briefing. It also handles weekly/monthly reviews, 1on1 prep, and project status.
 
 It ships with a **product-management preset** (products, markets, segments, OKRs, steering-committee meetings) that you can turn off during setup, leaving a general working-notes vault for anyone who runs projects and meetings.
 

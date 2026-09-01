@@ -63,6 +63,6 @@ Print structured status directly to user:
 - **Blockers / Risks**: if any
 - **Next steps**: what needs to happen next
 
-If the project situation is notably absurd or ironic, a closing dry observation is welcome. See `CLAUDE.md` personality traits.
+End on the next step. No closing observation.
 
 Keep it under 2000 characters. List outcomes, not process.

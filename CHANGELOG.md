@@ -2,6 +2,19 @@
 
 Notable changes to this template. Versions follow [semantic versioning](https://semver.org/) and are tagged in git.
 
+## v2.3.1 (2026-09-01)
+
+Stops the skills manufacturing wit, and makes a silent Windows failure visible.
+
+### Changed
+- `review-agent`, `1on1-prep` and `w-project-status` no longer ask for a wry or sardonic closing observation. All three now end on the last fact, risk or next action. Each instruction already carried a `never forced; skip it when the period was routine` guard and it did not hold: both seeded review notes closed on a quip and neither period was remarkable. A soft instruction cannot gate a model's urge to be charming, so the instruction is gone rather than qualified. The two seeded examples were rewritten to end on their last fact.
+- `w-project-status` also cited a `CLAUDE.md` "personality traits" section that does not exist, the same class of dangling reference v2.2.0 cleaned up.
+- Dashboard prose drops the piled-up metaphors ("cockpit", "heartbeat panel", "full pile", "windows to the last 7 days"). The `Tasks on the clock` heading is now `Due tasks`.
+- README opening no longer says the skills "automate a knowledge worker's working notes".
+
+### Added
+- `check-environment.py` reports when `.agents/skills/` was checked out as plain files instead of symlinks. Git for Windows only preserves symlinks with `core.symlinks` on, which needs Developer Mode or an elevated install; without it Codex discovers no skills and says nothing. The symlinks stay committed, since they are correct on Linux, macOS and WSL and moving them behind `/w-setup` would cost every normal clone a setup step to serve a minority config. Absent `.agents/` passes the check.
+
 ## v2.3.0 (2026-09-01)
 
 A `project:` auditor, and model routing that stops rotting.

@@ -43,5 +43,3 @@ period-end: 2026-03-08
 - Orion DE: market + pilot scope locked.
 - Northwind partnership terms agreed (12% rev-share), in legal.
 - Main risk: pilot pipeline, gated on closing terms.
-
-*A week of locking decisions. Next week we find out if "agreed in principle" survives contact with legal.*
