@@ -72,6 +72,20 @@ def _json_ok(path):
         return False
 
 
+def _agent_links_ok(vault):
+    """True when .agents/skills/ entries resolve to the .claude/skills/ dirs.
+
+    Absent entirely is fine (nobody is obliged to run Codex). A regular file
+    where a directory should be is the Windows no-symlink checkout, and that is
+    the case worth reporting.
+    """
+    links = vault / ".agents" / "skills"
+    if not links.is_dir():
+        return True
+    entries = list(links.iterdir())
+    return all(e.is_dir() for e in entries) if entries else True
+
+
 def build_vault_checks(vault):
     db = vault / "_db"
     registry = db / "entity-registry.json"
@@ -100,6 +114,20 @@ def build_vault_checks(vault):
             "required": True,
             "unlocks": "duplicate detection and the log-integrity check in /w-daily",
             "fix": "corrupt log: restore from _db/backups/, or delete it to start a fresh log",
+        },
+        {
+            # Git for Windows checks a symlink out as a plain text file holding the
+            # target path unless core.symlinks is on, which needs Developer Mode or
+            # an elevated install. Codex then discovers no skills and says nothing,
+            # so this check exists to turn a silent miss into a visible one.
+            "key": "agent-skill-links",
+            "name": ".agents/skills/ links resolve (Codex skill discovery)",
+            "ok": _agent_links_ok(vault),
+            "required": False,
+            "unlocks": "Codex finding the same skills as Claude Code",
+            "fix": ("checked out as plain files, so symlinks are off: "
+                    "`git config core.symlinks true` then re-checkout "
+                    "(`git checkout -- .agents`). Claude Code is unaffected either way"),
         },
     ]
 

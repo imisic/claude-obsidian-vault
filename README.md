@@ -81,6 +81,7 @@ Every user-invocable skill is a Claude Code slash command. Run them from Claude 
 - **Claude Code**, signed in to an Anthropic account. The `/w-*` skills are Claude sessions and use your plan/quota like any other Claude session (see [Your data](#your-data) on cost).
 - **Python 3.10+** for the `_scripts/` pipeline. The core pipeline is **standard library only**, no third-party packages required.
 - **Document conversion (optional, degrades gracefully):** PDF, HTML, images, and text process with **zero installs** (Claude reads them natively). `pip install markitdown` adds DOCX/PPTX/XLSX; a `defuddle` install gives cleaner HTML. Run `python _scripts/check-environment.py` to see what's installed and what each tool adds.
+- **Codex users on Windows:** `.agents/skills/` is a set of symlinks into `.claude/skills/`, so one definition serves both tools. Git for Windows only checks symlinks out as symlinks when `core.symlinks` is on, which needs Developer Mode or an elevated install; otherwise they land as small text files and Codex finds no skills, silently. `python _scripts/check-environment.py` reports this. Claude Code is unaffected either way.
 - **Optional sources:** a [Plaud](https://www.plaud.ai/) device (or any recorder that drops transcript files into `00-Inbox/`), and Windows + Power Automate + OneDrive for automated email capture (`_scripts/Pull-Emails.ps1`). If you don't use these, the related steps simply no-op on every run, nothing to configure.
 
 ## Getting started
